@@ -1,0 +1,9 @@
+# CSV files (except those in /results)
+*.csv
+!results/**/*.csv
+
+# Model files
+*.safetensors
+*.pth
+*.pt
+*.json

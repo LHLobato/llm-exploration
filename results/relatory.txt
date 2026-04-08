@@ -1,0 +1,54 @@
+
+==================================================
+ARQUIVO: benign_5345_features.csv.csv
+==================================================
+
+>>> COLUNAS:
+['name', 'resolutions_count', 'subdomains_count', 'dns_records_count', 'https_validity', 'ssl_exists']
+
+>>> HEAD (5 primeiras linhas):
+                  name  resolutions_count  subdomains_count  dns_records_count  https_validity  ssl_exists
+0           037hdd.com                4.0               1.0                8.0      1581033599           1
+1        1000lotto.com               12.0               1.0                8.0      1581983999           1
+2          1001jeux.fr                4.0             100.0                8.0      1570233599           1
+3  101fitnesstips.info               12.0               1.0                6.0           43200           0
+4          1111.com.tw                1.0              61.0                6.0      1618156799           1
+
+>>> DESCRIBE (Estatísticas):
+       resolutions_count  subdomains_count  dns_records_count  https_validity   ssl_exists
+count        5345.000000       5345.000000        5345.000000    5.345000e+03  5345.000000
+mean           39.156969         27.681197          10.261366    1.262218e+09     0.792142
+std           128.803228         36.799507           5.936192    6.386545e+08     0.405812
+min             0.000000          0.000000           0.000000    4.320000e+04     0.000000
+25%             2.000000          2.000000           7.000000    1.569964e+09     1.000000
+50%             5.000000          7.000000           9.000000    1.576282e+09     1.000000
+75%            12.000000         43.000000          14.000000    1.589069e+09     1.000000
+max          1000.000000        100.000000          54.000000    1.637842e+09     1.000000
+
+
+==================================================
+ARQUIVO: malicious_1356_features.csv.csv
+==================================================
+
+>>> COLUNAS:
+['Unnamed: 0', 'resolutions_count', 'subdomains_count', 'dns_records_count', 'https_validity', 'ssl_exists']
+
+>>> HEAD (5 primeiras linhas):
+           Unnamed: 0  resolutions_count  subdomains_count  dns_records_count  https_validity  ssl_exists
+0        11143138.com                3.0               1.0                0.0           43200           0
+1  1dealfitness.co.uk                6.0               1.0                7.0      1573635742           1
+2          231060.com                3.0               2.0                0.0           43200           0
+3         3138003.com                3.0               1.0                0.0           43200           0
+4         3138007.com                3.0               1.0                0.0           43200           0
+
+>>> DESCRIBE (Estatísticas):
+       resolutions_count  subdomains_count  dns_records_count  https_validity   ssl_exists
+count        1356.000000       1356.000000        1356.000000    1.356000e+03  1356.000000
+mean            1.004425          0.158555           0.567847    1.048288e+08     0.064897
+std             6.416996          1.291731           2.092115    3.931657e+08     0.246434
+min             0.000000          0.000000           0.000000    4.320000e+04     0.000000
+25%             0.000000          0.000000           0.000000    4.320000e+04     0.000000
+50%             0.000000          0.000000           0.000000    4.320000e+04     0.000000
+75%             0.000000          0.000000           0.000000    4.320000e+04     0.000000
+max           156.000000         32.000000          15.000000    1.625918e+09     1.000000
+
