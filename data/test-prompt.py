@@ -62,7 +62,8 @@ def build_structured_prompt(row: pd.Series) -> str:
     # [whois] — só inclui datas se o whois estiver presente
     raw_whois = row.get('has_whois', False)
     whois_present = fmt_bool(raw_whois)
-    is_whois = isinstance(raw_whois, str) and raw_whois.strip().lower() == "true" or raw_whois is True
+    # CORREÇÃO: has_whois é 1.0/0.0 (float), não string
+    is_whois = bool(float(raw_whois)) if raw_whois is not None else False
 
     if is_whois:
         lifetime = fmt_float(row.get('lifetime', 0), 2)

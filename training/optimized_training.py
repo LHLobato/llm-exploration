@@ -12,7 +12,7 @@ import evaluate
 import numpy as np
 import pandas as pd
 import torch
-from datasets import Dataset, DatasetDict
+from datasets import Dataset, DatasetDict, load_from_disk
 from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
 from scipy.special import softmax
 from sklearn.model_selection import train_test_split
@@ -26,19 +26,21 @@ from transformers import (
     TrainingArguments,
 )
 
+# Importação segura do Unsloth - sem quebrar se não estiver disponível
+UNSLOTH_AVAILABLE = False
 try:
-    from unsloth import FastLanguageModel, FastSequenceClassificationModel, is_bfloat16_supported
+    from unsloth import FastSequenceClassificationModel
     from unsloth.trainer import UnslothTrainer, UnslothTrainingArguments
     UNSLOTH_AVAILABLE = True
+    print("Unsloth disponível!")
 except ImportError:
-    UNSLOTH_AVAILABLE = False
     print("Unsloth não disponível. Usando transformers padrão.")
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model",
     type=str,
-    default="BERT-Base",
+    default="Qwen",
     choices=[
         "BERT-Base",
         "distilBERT",
@@ -55,7 +57,7 @@ parser.add_argument(
 parser.add_argument(
     "--dataset",
     type=str,
-    default="domain",
+    default="domain-enriched",
     choices=["domain", "domain-enriched", "csic", "fwaf", "httpparams", "lim", "phiusiil"],
 )
 parser.add_argument("--dora", action="store_true", help="Usar a técnica DoRA")
@@ -64,13 +66,13 @@ parser.add_argument("--strategy", type=str, help="Strategy adopted")
 parser.add_argument("--num_epochs", type=int, help="Número de épocas")
 parser.add_argument("--check", action="store_true", help="Resume from checkpoint")
 parser.add_argument("--optuna", action="store_true")
-parser.add_argument("--use_unsloth", action="store_true", help="Usar biblioteca Unsloth para treinamento otimizado")
+parser.add_argument("--use_unsloth", action="store_true", help="Usar Unsloth")
+parser.add_argument("--no_subsampling", action="store_true", help="Não fazer subsampling (usa todos os dados)")
+parser.add_argument("--token_cache", action="store_true", help="Usar cache de tokenização")
 args = parser.parse_args()
 
 
 CHAT_TEMPLATE_MODELS = ["Llama-3", "Qwen", "Gemma-2B", "TinyLlama"]
-
-
 LLM_MODELS = ["Llama-3", "TinyLlama", "Qwen", "Gemma-2B"]
 
 # ---------------------------------------------------------------------------
@@ -81,10 +83,6 @@ auc_score = evaluate.load("roc_auc")
 f1 = evaluate.load("f1")
 
 def remove_www_prefix(domains):
-    """
-    Recebe um vetor de domínios e remove o prefixo 'www.' do início de cada um.
-    Retorna um array do NumPy processado.
-    """
     processed_domains = [str(domain).removeprefix("https://") for domain in domains]
     processed_domains = [str(domain).removeprefix("www.") for domain in processed_domains]
     return np.array(processed_domains)
@@ -115,8 +113,10 @@ def compute_metrics(eval_pred):
     return {"Accuracy": acc, "AUC": auc, "F1-Score": f1_sc}
 
 
+# ============================================================================
+# CARREGAR DATASET
+# ============================================================================
 if args.dataset == "lim":
-
     col_to_get = "prompt" if args.strategy == "tokenized-prompt" else "0"
     df = pd.read_csv("data/less-is-more/BTCP.csv", index_col=False)
     prompts = df[col_to_get].values
@@ -133,35 +133,21 @@ elif args.dataset == "phiusiil":
     if args.strategy == "tokenized-prompt":
         df = pd.read_csv("data/PhiUSIIL/phiusiil-filtered.csv", index_col=False)
         names = df['prompt'].values
-
     else:
         df = pd.read_csv("data/PhiUSIIL/PhiUSIIL.csv", index_col=False)
         names = df['Domain'].values
     labels = df['label'].values
 
-    """
-    N_SAMPLES = 50000
-
-        if N_SAMPLES and N_SAMPLES < len(names):
-            print(f"Modo de Teste: Extraindo uma amostra estratificada de {N_SAMPLES} domínios...")
-            _, names, _, labels = train_test_split(
-                names, labels,
-                test_size=N_SAMPLES,
-                random_state=0,
-                stratify=labels
-        )
-    """
     names = remove_www_prefix(names)
 
     X_train, X_temp, y_train, y_temp = train_test_split(
         names, labels, test_size=0.30, random_state=0, stratify=labels
     )
-
     X_val, X_test, y_val, y_test = train_test_split(
         X_temp, y_temp, test_size=0.50, random_state=0, stratify=y_temp
     )
 
-if args.dataset == "domain":
+elif args.dataset == "domain":
     df = pd.read_csv("../dns-feature-enrichment/csvs/dataset.csv")
     labels = df["malicious"].values
     prompts = df["name"].values
@@ -175,12 +161,11 @@ if args.dataset == "domain":
     )
 
 elif args.dataset == "domain-enriched":
-
     strategy = "prompt" if args.strategy == "tokenized" else "name"
 
-    df_train = pd.read_csv(f"data/acme/train.csv", index_col=False)
-    df_val = pd.read_csv(f"data/acme/val.csv", index_col=False)
-    df_test = pd.read_csv(f"data/acme/test.csv", index_col=False)
+    df_train = pd.read_csv("data/acme/train.csv", index_col=False)
+    df_val = pd.read_csv("data/acme/val.csv", index_col=False)
+    df_test = pd.read_csv("data/acme/test.csv", index_col=False)
 
     X_train = df_train[strategy].values
     X_val = df_val[strategy].values
@@ -190,23 +175,42 @@ elif args.dataset == "domain-enriched":
     y_val = df_val["malicious"].values
     y_test = df_test["malicious"].values
 
+    # === SUBAMOSTRAGEM PARA 150K (se não flag --no_subsampling) ===
+    if not args.no_subsampling and len(X_train) > 150000:
+        print(f"\n📊 Subamostragem: {len(X_train)} → 150,000 amostras (estratificada)")
+        X_train, _, y_train, _ = train_test_split(
+            X_train, y_train,
+            train_size=150000,
+            random_state=0,
+            stratify=y_train
+        )
+
+        X_val, _, y_val, _ = train_test_split(
+            X_val, y_val,
+            train_size=50000,
+            random_state=0,
+            stratify=y_val
+        )
+
+        X_test, _, y_test, _ = train_test_split(
+            X_test, y_test,
+            train_size=50000,
+            random_state=0,
+            stratify=y_test
+        )
+
+        print(f"✅ Train reduzido para {len(X_train)} amostras\n")
+
 print("\n--- Tamanho dos Conjuntos ---")
 print(f"Treino:    {len(X_train)} amostras")
 print(f"Validação: {len(X_val)} amostras")
 print(f"Teste:     {len(X_test)} amostras")
 print("---------------------------\n")
 
-train_dataset = Dataset.from_dict({"prompt": X_train, "label": y_train})
-val_dataset = Dataset.from_dict({"prompt": X_val, "label": y_val})
-test_dataset = Dataset.from_dict({"prompt": X_test, "label": y_test})
 
-raw_datasets = DatasetDict(
-    {"train": train_dataset, "validation": val_dataset, "test": test_dataset}
-)
-
-# ---------------------------------------------------------------------------
-# Tokenizador
-# ---------------------------------------------------------------------------
+# ============================================================================
+# TOKENIZER E MODELO
+# ============================================================================
 model_path = args.modelpath
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 
@@ -216,7 +220,6 @@ if args.model in LLM_MODELS:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right" if args.model == "Gemma-2B" else "left"
 elif args.model == "DEBERTa":
-    print("debertaa")
     optim = "adamw_8bit"
 else:
     optim = "adamw_torch"
@@ -226,42 +229,60 @@ SYSTEM_INSTRUCTION = (
     "Analyze the domain record below and classify it as benign or malicious."
 )
 
-
 def format_chat_prompt(prompt_text: str) -> str:
-    """
-    Envolve o prompt enriquecido na estrutura role/content do chat template
-    nativo do modelo (ex: Gemma, Llama, Qwen).
-
-    Resultado para o Gemma 2B Instruct:
-        <start_of_turn>user
-        You are a cybersecurity classifier. Analyze the domain record below
-        and classify it as benign or malicious.
-
-        [name]: fr7ehgd.duckdns.org
-        [entropy]: 3.6819
-        [whois]: present=no
-        ...
-        <end_of_turn>
-        <start_of_turn>model
-    """
     messages = [{"role": "user", "content": f"{SYSTEM_INSTRUCTION}\n\n{prompt_text}"}]
     return tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
     )
 
+# max_length otimizado para prompts do acme (~170-180 tokens em média)
+MAX_LENGTH = 192 if args.model in LLM_MODELS else 128
 
 def preprocess_function(examples):
     if args.model in CHAT_TEMPLATE_MODELS:
         formatted = [format_chat_prompt(p) for p in examples["prompt"]]
-        return tokenizer(formatted, truncation=True, max_length=160)
+        return tokenizer(formatted, truncation=True, max_length=MAX_LENGTH)
     else:
-        return tokenizer(examples["prompt"], truncation=True, max_length=160)
+        return tokenizer(examples["prompt"], truncation=True, max_length=MAX_LENGTH)
+
+
+# Cache de tokenização - evita reprocessar datasets grandes
+cache_dir = f"data/.token_cache_{args.model}_{args.dataset}_{args.strategy}"
+use_cache = args.token_cache and os.path.exists(cache_dir)
+
+if use_cache:
+    print(f"\n💾 Carregando tokenização em cache de: {cache_dir}")
+    tokenized_datasets = load_from_disk(cache_dir)
+else:
+    print("\n🔄 Tokenizando dataset...")
+    train_dataset = Dataset.from_dict({"prompt": X_train, "label": y_train})
+    val_dataset = Dataset.from_dict({"prompt": X_val, "label": y_val})
+    test_dataset = Dataset.from_dict({"prompt": X_test, "label": y_test})
+
+    raw_datasets = DatasetDict({
+        "train": train_dataset,
+        "validation": val_dataset,
+        "test": test_dataset
+    })
+
+    tokenized_datasets = raw_datasets.map(
+        preprocess_function,
+        batched=True,
+        num_proc=4,  # Paralelizar tokenização
+        desc="Tokenizando"
+    )
+
+    if args.token_cache:
+        print(f"\n💾 Salvando cache em: {cache_dir}")
+        tokenized_datasets.save_to_disk(cache_dir)
 
 
 id2label = {0: "Benign", 1: "Malicious"}
 label2id = {"Benign": 0, "Malicious": 1}
 
-
+# ============================================================================
+# CARREGAR MODELO
+# ============================================================================
 bnb_config = None
 if args.model in ["Qwen", "Gemma-2B", "Llama-3", "TinyLlama"]:
     bnb_config = BitsAndBytesConfig(
@@ -271,45 +292,67 @@ if args.model in ["Qwen", "Gemma-2B", "Llama-3", "TinyLlama"]:
         bnb_4bit_compute_dtype=torch.bfloat16,
     )
 
-# Carregar modelo - com suporte a Unsloth se disponível
+# Tentar Unsloth se disponível e requisitado
 use_unsloth = args.use_unsloth and UNSLOTH_AVAILABLE and args.model in ["Llama-3", "Qwen", "Gemma-2B", "TinyLlama"]
 
 if use_unsloth:
-    print("\n--- Carregando modelo com Unsloth (SequenceClassification) ---")
-    model, tokenizer = FastSequenceClassificationModel.from_pretrained(
-        model_name=model_path,
-        num_labels=2,
-        max_seq_length=160,
-        dtype=None,
-        load_in_4bit=True,
-    )
-    # Configurar tokens de padding
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    model.config.pad_token_id = tokenizer.pad_token_id
-    model.config.bos_token_id = tokenizer.bos_token_id
-    model.config.eos_token_id = tokenizer.eos_token_id
-    tokenizer.padding_side = "right"
-    
-    # Aplicar Unsloth PEFT com camadas expandidas
-    model = FastSequenceClassificationModel.get_peft_model(
-        model,
-        r=16,
-        lora_alpha=32,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                       "gate_proj", "up_proj", "down_proj",],
-        lora_dropout=0.0,
-        bias="none",
-        use_gradient_checkpointing=True,
-        random_state=42,
-        use_dora=args.dora,
-        loftq_config=None,
-    )
-    if args.dora:
-        print("DoRA ativado com Unsloth")
-    model.print_trainable_parameters()
-else:
-    print("\n--- Carregando modelo com transformers padrão ---")
+    print("\n🚀 Carregando modelo com Unsloth...")
+    try:
+        # CRUCIAL: FastSequenceClassificationModel retorna (model, tokenizer)
+        # O bug comum é confundir os retornos ou não configurar tokens antes do PEFT
+        model, tokenizer = FastSequenceClassificationModel.from_pretrained(
+            model_name=model_path,
+            num_labels=2,
+            max_seq_length=MAX_LENGTH,
+            dtype=None,  # Auto-detect (usa bf16 se disponível)
+            load_in_4bit=True,
+        )
+
+        # Configurar tokens ANTES de aplicar PEFT
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+        if tokenizer.bos_token is None:
+            tokenizer.bos_token = tokenizer.eos_token
+
+        # Configurar modelo corretamente
+        model.config.use_cache = False
+        model.config.pad_token_id = tokenizer.pad_token_id
+        model.config.bos_token_id = tokenizer.bos_token_id
+        model.config.eos_token_id = tokenizer.eos_token_id
+
+        # VERIFICAR se model é realmente um objeto de modelo e não string
+        if isinstance(model, str):
+            raise TypeError(f"Unsloth retornou string ao invés de modelo: {model}")
+
+        print(f"Modelo carregado: {type(model)}")
+        print(f"Device do modelo: {next(model.parameters()).device}")
+
+        tokenizer.padding_side = "right"
+
+        # Aplicar LoRA via Unsloth
+        model = FastSequenceClassificationModel.get_peft_model(
+            model,
+            r=8,
+            lora_alpha=16,
+            target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                           "gate_proj", "up_proj", "down_proj"],
+            lora_dropout=0.0,
+            bias="none",
+            use_gradient_checkpointing=True,
+            random_state=42,
+            use_dora=args.dora,
+        )
+        model.print_trainable_parameters()
+
+    except Exception as e:
+        print(f"\n⚠️ Unsloth falhou: {e}")
+        import traceback
+        traceback.print_exc()
+        print("Revertendo para transformers padrão...")
+        use_unsloth = False
+
+if not use_unsloth:
+    print("\n📦 Carregando modelo com transformers padrão...")
     model = AutoModelForSequenceClassification.from_pretrained(
         model_path,
         num_labels=2,
@@ -318,7 +361,7 @@ else:
         quantization_config=bnb_config,
         device_map="auto" if bnb_config else None,
     )
-    # Configurar padding para todos os modelos não-Unsloth
+
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     if args.model == "Gemma-2B":
@@ -326,77 +369,71 @@ else:
         tokenizer.padding_side = "right"
     elif args.model == "DEBERTa":
         model.config.pad_token_id = tokenizer.pad_token_id
-        model.config.bos_token_id = tokenizer.bos_token_id
-        model.config.eos_token_id = tokenizer.eos_token_id
     elif args.model in LLM_MODELS:
         tokenizer.padding_side = "left"
 
-# Aplicar LoRA/DoRA apenas se não estiver usando Unsloth (já aplica automaticamente)
-if not use_unsloth and args.dora:
-    if bnb_config:
-        model = prepare_model_for_kbit_training(model)
-
-    # Camadas expandidas para melhor captura de padrões - inclui mais módulos de atenção
-    target_modules = {
-        "BERT-Base": ["query", "value", "key", "attention.output.dense"],
-        "distilBERT": ["q_lin", "v_lin", "k_lin", "out_lin"],
+    # LoRA/DoRA otimizado
+    target_modules_map = {
+        "BERT-Base": ["query", "value", "key"],
+        "distilBERT": ["q_lin", "v_lin", "k_lin"],
         "DEBERTa": ["query_proj", "value_proj", "key_proj"],
-        "Llama-3": ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        "TinyLlama": ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        "Qwen": ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        "Gemma-2B": ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-    }[args.model]
+        "Llama-3": ["q_proj", "v_proj", "k_proj"],  # Reduzido - apenas atenção
+        "TinyLlama": ["q_proj", "v_proj", "k_proj"],
+        "Qwen": ["q_proj", "v_proj", "k_proj"],
+        "Gemma-2B": ["q_proj", "v_proj", "k_proj"],
+    }
 
     lora_config = LoraConfig(
-        use_dora=True,
-        r=16,
-        lora_alpha=32,
-        target_modules=target_modules,
+        use_dora=args.dora,
+        r=8,  # Reduzido de 16 para 8
+        lora_alpha=16,  # Proporcional
+        target_modules=target_modules_map.get(args.model, ["query", "value"]),
         task_type=TaskType.SEQ_CLS,
         bias="none",
         lora_dropout=0.0,
     )
     model = get_peft_model(model, lora_config)
-    print(f"LoRA aplicado com módulos: {target_modules}")
     model.print_trainable_parameters()
 
-
-tokenized_datasets = raw_datasets.map(preprocess_function, batched=True)
 data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
 
-if args.model == "distilBERT":
-    batch_size = 32
+# ============================================================================
+# BATCH SIZE OTIMIZADO POR MODELO
+# ============================================================================
+batch_sizes = {
+    "distilBERT": 64,
+    "BERT-Base": 48,
+    "DEBERTa": 48,
+    "Llama-3": 64,
+    "Qwen": 64,
+    "TinyLlama": 48,
+    "Gemma-2B": 32,
+}
+batch_size = batch_sizes.get(args.model, 32)
 
-elif args.model in ["BERT-Base", "DEBERTa"]:
-    batch_size = 16
-
-elif args.model in ["Llama-3", "Qwen"]:
-    batch_size = 64
-
-elif args.model == "TinyLlama":
-    batch_size = 48
-
-elif args.model == "Gemma-2B":
-    batch_size = 16
-
-
-lr =  2.082238103521888e-05
-
+lr = 2.082238103521888e-05
 
 outputdir = f"models/{args.model}/{args.dataset}-{args.strategy}-{args.parameters}/"
 best = outputdir + "best/"
 
-# Usar UnslothTrainingArguments se Unsloth estiver disponível
+# ============================================================================
+# TRAINING ARGS OTIMIZADOS
+# ============================================================================
+# Gradient accumulation maior = menos overhead de comunicação
+# Mais workers no dataloader = GPU menos ociosa
+grad_accumulation = 4 if args.model in LLM_MODELS else 2
+
 if use_unsloth:
     training_args = UnslothTrainingArguments(
         output_dir=outputdir,
         learning_rate=lr,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
-        gradient_accumulation_steps=2,
+        gradient_accumulation_steps=grad_accumulation,
         num_train_epochs=args.num_epochs,
-        logging_strategy="epoch",
+        logging_strategy="steps",
+        logging_steps=100,  # Log a cada 100 steps (mais granular)
         eval_strategy="epoch",
         save_strategy="epoch",
         save_total_limit=1,
@@ -405,11 +442,11 @@ if use_unsloth:
         bf16=True,
         greater_is_better=True,
         warmup_ratio=0.05598334209239353,
-        weight_decay= 0.0852495268536051,
-        optim=optim,
+        weight_decay=0.0852495268536051,
+        optim="adamw_8bit",
         gradient_checkpointing=True,
-        dataloader_num_workers=4,
-        dataloader_prefetch_factor=2,
+        dataloader_num_workers=8,  # Aumentado de 4 para 8
+        dataloader_prefetch_factor=4,  # Aumentado de 2 para 4
     )
 else:
     training_args = TrainingArguments(
@@ -417,9 +454,10 @@ else:
         learning_rate=lr,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
-        gradient_accumulation_steps=2,
+        gradient_accumulation_steps=grad_accumulation,
         num_train_epochs=args.num_epochs,
-        logging_strategy="epoch",
+        logging_strategy="steps",
+        logging_steps=100,
         eval_strategy="epoch",
         save_strategy="epoch",
         save_total_limit=1,
@@ -428,14 +466,16 @@ else:
         bf16=True,
         greater_is_better=True,
         warmup_ratio=0.05598334209239353,
-        weight_decay= 0.0852495268536051,
+        weight_decay=0.0852495268536051,
         optim=optim,
         gradient_checkpointing=True,
-        dataloader_num_workers=4,
-        dataloader_prefetch_factor=2,
+        dataloader_num_workers=8,
+        dataloader_prefetch_factor=4,
     )
 
-# Usar UnslothTrainer se Unsloth estiver disponível
+# ============================================================================
+# TRAINER
+# ============================================================================
 if use_unsloth:
     trainer = UnslothTrainer(
         model=model,
@@ -445,7 +485,7 @@ if use_unsloth:
         processing_class=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=5)],
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=3)],  # Reduzido de 5 para 3
     )
 else:
     trainer = Trainer(
@@ -456,34 +496,39 @@ else:
         processing_class=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=5)],
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=3)],
     )
 
 
+# ============================================================================
+# OPTUNA (se ativado)
+# ============================================================================
 if args.optuna:
     def model_init():
         if use_unsloth:
             temp_model, _ = FastSequenceClassificationModel.from_pretrained(
                 model_name=model_path,
                 num_labels=2,
-                max_seq_length=160,
+                max_seq_length=MAX_LENGTH,
                 dtype=None,
                 load_in_4bit=True,
             )
-            # Configurar padding
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
+            if tokenizer.bos_token is None:
+                tokenizer.bos_token = tokenizer.eos_token
+            temp_model.config.use_cache = False
             temp_model.config.pad_token_id = tokenizer.pad_token_id
             temp_model.config.bos_token_id = tokenizer.bos_token_id
             temp_model.config.eos_token_id = tokenizer.eos_token_id
-            
+
             temp_model = FastSequenceClassificationModel.get_peft_model(
                 temp_model,
-                r=16,
-                lora_alpha=32,
+                r=8,
+                lora_alpha=16,
                 target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                               "gate_proj", "up_proj", "down_proj",],
-                lora_dropout=0.05,
+                               "gate_proj", "up_proj", "down_proj"],
+                lora_dropout=0.0,
                 bias="none",
                 use_gradient_checkpointing=True,
                 random_state=42,
@@ -499,59 +544,47 @@ if args.optuna:
                 quantization_config=bnb_config,
                 device_map="auto" if bnb_config else None,
             )
-            # Configurar padding
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
             if args.model == "Gemma-2B":
                 temp_model.config.pad_token_id = tokenizer.pad_token_id
             elif args.model == "DEBERTa":
                 temp_model.config.pad_token_id = tokenizer.pad_token_id
-                temp_model.config.bos_token_id = tokenizer.bos_token_id
-                temp_model.config.eos_token_id = tokenizer.eos_token_id
 
-            if args.dora:
-                if bnb_config:
-                    temp_model = prepare_model_for_kbit_training(temp_model)
-                l_config = LoraConfig(
-                    use_dora=True,
-                    r=16,
-                    lora_alpha=32,
-                    target_modules=target_modules,
-                    task_type=TaskType.SEQ_CLS,
-                    bias="none",
-                    lora_dropout=0.05,
-                )
-                temp_model = get_peft_model(temp_model, l_config)
+            l_config = LoraConfig(
+                use_dora=args.dora,
+                r=8,
+                lora_alpha=16,
+                target_modules=target_modules_map.get(args.model, ["query", "value"]),
+                task_type=TaskType.SEQ_CLS,
+                bias="none",
+                lora_dropout=0.05,
+            )
+            return get_peft_model(temp_model, l_config)
 
-            return temp_model
-
-    # 2. Defina o espaço de busca de hiperparâmetros
     def hp_space(trial):
         return {
             "learning_rate": trial.suggest_float("learning_rate", 1e-5, 5e-5, log=True),
             "weight_decay": trial.suggest_float("weight_decay", 0.0, 0.1),
-            "warmup_ratio": trial.suggest_float("warmup_ratio", 0.05, 0.15),
+            "warmup_ratio": trial.suggest_float("warmup_ratio", 0.03, 0.10),
         }
 
-    # 3. Prepare os datasets de busca (Subamostragem de 10k)
-    # Usando shuffle para garantir que a amostra seja representativa
-    search_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(min(10000, len(tokenized_datasets["train"]))))
-    search_val_dataset = tokenized_datasets["validation"].shuffle(seed=42).select(range(min(2000, len(tokenized_datasets["validation"]))))
+    search_train = tokenized_datasets["train"].shuffle(seed=42).select(range(min(10000, len(tokenized_datasets["train"]))))
+    search_val = tokenized_datasets["validation"].shuffle(seed=42).select(range(min(2000, len(tokenized_datasets["validation"]))))
 
-    # 4. Inicialize o Trainer para Busca
     trainer = Trainer(
-        model=None, # Importante: Deixe None para usar o model_init
+        model=None,
         model_init=model_init,
         args=training_args,
-        train_dataset=search_train_dataset,
-        eval_dataset=search_val_dataset,
+        train_dataset=search_train,
+        eval_dataset=search_val,
         processing_class=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
         callbacks=[EarlyStoppingCallback(early_stopping_patience=3)],
     )
 
-    print("\n--- Iniciando Grid/Bayesian Search com Optuna (10k samples) ---")
+    print("\n🔍 Iniciando busca de hiperparâmetros com Optuna (10k samples)...")
     best_run = trainer.hyperparameter_search(
         direction="maximize",
         backend="optuna",
@@ -559,7 +592,7 @@ if args.optuna:
         n_trials=6
     )
 
-    print(f"\nMelhores Hiperparâmetros: {best_run.hyperparameters}")
+    print(f"\n✅ Melhores Hiperparâmetros: {best_run.hyperparameters}")
 
     for n, v in best_run.hyperparameters.items():
         setattr(trainer.args, n, v)
@@ -567,42 +600,41 @@ if args.optuna:
     trainer.train_dataset = tokenized_datasets["train"]
     trainer.eval_dataset = tokenized_datasets["validation"]
 
-    # 6. Treinamento Final
-    print(f"\nIniciando treinamento FINAL do {args.model} com parâmetros otimizados...\n")
+    print(f"\n🚀 Iniciando treinamento FINAL com parâmetros otimizados...\n")
     trainer.train(resume_from_checkpoint=args.check)
 else:
-    print(f"\nIniciando treinamento do {args.model}...\n")
+    print(f"\n🚀 Iniciando treinamento do {args.model}...\n")
     trainer.train(resume_from_checkpoint=args.check)
 
+# ============================================================================
+# SALVAR E AVALIAR
+# ============================================================================
 trainer.save_model(best)
 tokenizer.save_pretrained(best)
 
 if use_unsloth:
-    # Salvar modelo Unsloth com eficiência
     model.save_pretrained(best)
-    print(f"Modelo Unsloth salvo em {best}")
 
-print("\nAvaliação no Conjunto Final de Teste:")
+print(f"\n✅ Modelo salvo em {best}")
+
+print("\n📊 Avaliação no conjunto de teste:")
 predictions = trainer.predict(tokenized_datasets["test"])
 
 logits = predictions.predictions
 labels = predictions.label_ids
 metrics = compute_metrics((logits, labels))
 
-path = "bert-classifier.csv"
+path = "results/optimized-bert-classifier.csv"
+os.makedirs("results", exist_ok=True)
 exists = os.path.exists(path)
 
-pd.DataFrame(
-    {
-        "model": [f"{model_path}-{args.dataset}-{args.parameters}"],
-        "strategy": [
-           args.strategy
-        ],
-        "accuracy": [metrics["Accuracy"]],
-        "auc": [metrics["AUC"]],
-        "f1-score": [metrics["F1-Score"]],
-    }
-).to_csv(path, index=False, header=not exists, mode="a")
+pd.DataFrame({
+    "model": [f"{model_path}-{args.dataset}-{args.parameters}"],
+    "strategy": [args.strategy],
+    "accuracy": [metrics["Accuracy"]],
+    "auc": [metrics["AUC"]],
+    "f1-score": [metrics["F1-Score"]],
+}).to_csv(path, index=False, header=not exists, mode="a")
 
 print(metrics)
-print("\nTreinamento finalizado e salvo com sucesso!")
+print("\n✅ Treinamento final e salvo com sucesso!")
