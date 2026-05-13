@@ -55,3 +55,8 @@ microsoft/deberta-v3-base-domain-enriched-None,tokenized,0.9144,0.9689,0.9143
 Qwen/Qwen2.5-0.5B-Instruct-domain-enriched-0.5B,tokenized,0.8783,0.9456,0.8781
 Qwen/Qwen2.5-0.5B-Instruct-domain-enriched-0.5B,tokenized,0.7375,0.7908,0.7362
 Qwen/Qwen2.5-0.5B-Instruct-domain-enriched-0.5B,tokenized,0.5867,0.6274,0.584
+Qwen/Qwen3.5-0.8B-domain-enriched-0.8B,tokenized,0.8945,0.9576,0.8943
+answerdotai/ModernBERT-base-domain-enriched-None,tokenized,0.9115,0.9701,0.9115
+answerdotai/ModernBERT-base-domain-enriched-None,tokenized,0.9191,0.974,0.9191
+answerdotai/ModernBERT-large-domain-enriched-None,tokenized,0.9207,0.9752,0.9207
+answerdotai/ModernBERT-large-domain-enriched-None,only-names,0.8316,0.9169,0.8315

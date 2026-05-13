@@ -1,4 +1,12 @@
 import os
+UNSLOTH_AVAILABLE = False
+try:
+    from unsloth import FastLanguageModel
+    from unsloth.trainer import UnslothTrainer, UnslothTrainingArguments
+    UNSLOTH_AVAILABLE = True
+    print("Unsloth disponível!")
+except ImportError:
+    print("Unsloth não disponível. Usando transformers padrão.")
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
@@ -27,14 +35,7 @@ from transformers import (
 )
 
 # Importação segura do Unsloth - sem quebrar se não estiver disponível
-UNSLOTH_AVAILABLE = False
-try:
-    from unsloth import FastSequenceClassificationModel
-    from unsloth.trainer import UnslothTrainer, UnslothTrainingArguments
-    UNSLOTH_AVAILABLE = True
-    print("Unsloth disponível!")
-except ImportError:
-    print("Unsloth não disponível. Usando transformers padrão.")
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -118,7 +119,7 @@ def compute_metrics(eval_pred):
 # ============================================================================
 if args.dataset == "lim":
     col_to_get = "prompt" if args.strategy == "tokenized-prompt" else "0"
-    df = pd.read_csv("data/less-is-more/BTCP.csv", index_col=False)
+    df = pd.read_csv("../data/less-is-more/BTCP.csv", index_col=False)
     prompts = df[col_to_get].values
     labels = df['label'].values
 
@@ -131,10 +132,10 @@ if args.dataset == "lim":
 
 elif args.dataset == "phiusiil":
     if args.strategy == "tokenized-prompt":
-        df = pd.read_csv("data/PhiUSIIL/phiusiil-filtered.csv", index_col=False)
+        df = pd.read_csv("../data/PhiUSIIL/phiusiil-filtered.csv", index_col=False)
         names = df['prompt'].values
     else:
-        df = pd.read_csv("data/PhiUSIIL/PhiUSIIL.csv", index_col=False)
+        df = pd.read_csv("../data/PhiUSIIL/PhiUSIIL.csv", index_col=False)
         names = df['Domain'].values
     labels = df['label'].values
 
@@ -163,9 +164,9 @@ elif args.dataset == "domain":
 elif args.dataset == "domain-enriched":
     strategy = "prompt" if args.strategy == "tokenized" else "name"
 
-    df_train = pd.read_csv("data/acme/train.csv", index_col=False)
-    df_val = pd.read_csv("data/acme/val.csv", index_col=False)
-    df_test = pd.read_csv("data/acme/test.csv", index_col=False)
+    df_train = pd.read_csv("../data/acme/fixed_train.csv", index_col=False)
+    df_val = pd.read_csv("../data/acme/fixed_val.csv", index_col=False)
+    df_test = pd.read_csv("../data/acme/fixed_test.csv", index_col=False)
 
     X_train = df_train[strategy].values
     X_val = df_val[strategy].values
@@ -187,14 +188,14 @@ elif args.dataset == "domain-enriched":
 
         X_val, _, y_val, _ = train_test_split(
             X_val, y_val,
-            train_size=50000,
+            train_size=35000,
             random_state=0,
             stratify=y_val
         )
 
         X_test, _, y_test, _ = train_test_split(
             X_test, y_test,
-            train_size=50000,
+            train_size=35000,
             random_state=0,
             stratify=y_test
         )
@@ -247,7 +248,7 @@ def preprocess_function(examples):
 
 
 # Cache de tokenização - evita reprocessar datasets grandes
-cache_dir = f"data/.token_cache_{args.model}_{args.dataset}_{args.strategy}"
+cache_dir = f"../data/.token_cache_{args.model}_{args.dataset}_{args.strategy}"
 use_cache = args.token_cache and os.path.exists(cache_dir)
 
 if use_cache:
@@ -298,14 +299,15 @@ use_unsloth = args.use_unsloth and UNSLOTH_AVAILABLE and args.model in ["Llama-3
 if use_unsloth:
     print("\n🚀 Carregando modelo com Unsloth...")
     try:
-        # CRUCIAL: FastSequenceClassificationModel retorna (model, tokenizer)
+        # CRUCIAL: FastLanguageModel retorna (model, tokenizer)
         # O bug comum é confundir os retornos ou não configurar tokens antes do PEFT
-        model, tokenizer = FastSequenceClassificationModel.from_pretrained(
+        model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=model_path,
             num_labels=2,
             max_seq_length=MAX_LENGTH,
             dtype=None,  # Auto-detect (usa bf16 se disponível)
             load_in_4bit=True,
+            sequence_classification=True
         )
 
         # Configurar tokens ANTES de aplicar PEFT
@@ -330,7 +332,7 @@ if use_unsloth:
         tokenizer.padding_side = "right"
 
         # Aplicar LoRA via Unsloth
-        model = FastSequenceClassificationModel.get_peft_model(
+        model = FastLanguageModel.get_peft_model(
             model,
             r=8,
             lora_alpha=16,
@@ -374,19 +376,23 @@ if not use_unsloth:
 
     # LoRA/DoRA otimizado
     target_modules_map = {
-        "BERT-Base": ["query", "value", "key"],
-        "distilBERT": ["q_lin", "v_lin", "k_lin"],
-        "DEBERTa": ["query_proj", "value_proj", "key_proj"],
-        "Llama-3": ["q_proj", "v_proj", "k_proj"],  # Reduzido - apenas atenção
-        "TinyLlama": ["q_proj", "v_proj", "k_proj"],
-        "Qwen": ["q_proj", "v_proj", "k_proj"],
-        "Gemma-2B": ["q_proj", "v_proj", "k_proj"],
-    }
-
+            # Encoders: Atenção (Q, K, V) + Camadas Densas (Feed-Forward e Saídas)
+            # O uso da palavra "dense" vai mapear automaticamente o attention.output.dense, 
+            # intermediate.dense e output.dense.
+            "BERT-Base": ["query", "key", "value", "dense"],
+            "distilBERT": ["q_lin", "k_lin", "v_lin", "out_lin", "lin1", "lin2"],
+            "DEBERTa": ["query_proj", "key_proj", "value_proj", "dense"],
+            
+            # Decoders / LLMs: Atenção Total (Q, K, V, O) + Perceptron Multicamadas (Gate, Up, Down)
+            "Llama-3": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+            "TinyLlama": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+            "Qwen": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+            "Gemma-2B": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        }
     lora_config = LoraConfig(
         use_dora=args.dora,
-        r=8,  # Reduzido de 16 para 8
-        lora_alpha=16,  # Proporcional
+        r=16,  # Reduzido de 16 para 8
+        lora_alpha=32,  # Proporcional
         target_modules=target_modules_map.get(args.model, ["query", "value"]),
         task_type=TaskType.SEQ_CLS,
         bias="none",
@@ -406,13 +412,13 @@ batch_sizes = {
     "BERT-Base": 48,
     "DEBERTa": 48,
     "Llama-3": 64,
-    "Qwen": 64,
+    "Qwen": 32,
     "TinyLlama": 48,
     "Gemma-2B": 32,
 }
 batch_size = batch_sizes.get(args.model, 32)
 
-lr = 2.082238103521888e-05
+lr = 3e-5
 
 outputdir = f"models/{args.model}/{args.dataset}-{args.strategy}-{args.parameters}/"
 best = outputdir + "best/"
@@ -441,8 +447,8 @@ if use_unsloth:
         metric_for_best_model="AUC",
         bf16=True,
         greater_is_better=True,
-        warmup_ratio=0.05598334209239353,
-        weight_decay=0.0852495268536051,
+        warmup_ratio=0.05,
+        weight_decay=0.08,
         optim="adamw_8bit",
         gradient_checkpointing=True,
         dataloader_num_workers=8,  # Aumentado de 4 para 8
@@ -465,8 +471,8 @@ else:
         metric_for_best_model="AUC",
         bf16=True,
         greater_is_better=True,
-        warmup_ratio=0.05598334209239353,
-        weight_decay=0.0852495268536051,
+        warmup_ratio=0.05,
+        weight_decay=0.08,
         optim=optim,
         gradient_checkpointing=True,
         dataloader_num_workers=8,
@@ -506,7 +512,7 @@ else:
 if args.optuna:
     def model_init():
         if use_unsloth:
-            temp_model, _ = FastSequenceClassificationModel.from_pretrained(
+            temp_model, _ = FastLanguageModel.from_pretrained(
                 model_name=model_path,
                 num_labels=2,
                 max_seq_length=MAX_LENGTH,
@@ -522,7 +528,7 @@ if args.optuna:
             temp_model.config.bos_token_id = tokenizer.bos_token_id
             temp_model.config.eos_token_id = tokenizer.eos_token_id
 
-            temp_model = FastSequenceClassificationModel.get_peft_model(
+            temp_model = FastLanguageModel.get_peft_model(
                 temp_model,
                 r=8,
                 lora_alpha=16,

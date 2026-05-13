@@ -1,8 +1,8 @@
 #!/bin/bash
 
 
-PATHS=("microsoft/deberta-v3-base")
-MODELS=("DEBERTa")
+PATHS=("google/gemma-3-4b-it")
+MODELS=("Gemma-2B")
 
 
 echo "----------------------------------"
@@ -15,11 +15,11 @@ for i in "${!MODELS[@]}"; do
 
     echo "Rodando: $model (Caminho: $path)"
     
-    python bert_training.py \
+    python ../training/bert_training.py \
         --model "$model" \
         --modelpath "$path" \
         --dataset domain-enriched \
-        --strategy "tokenized" \
+        --strategy "only-names" \
         --num_epochs 5
     
     echo "Finalizado: $model"

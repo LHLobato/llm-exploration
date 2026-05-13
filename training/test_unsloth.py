@@ -1,33 +1,34 @@
 #!/usr/bin/env python3
 """Teste rápido para verificar se Unsloth funciona corretamente"""
-
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-import torch
-from transformers import AutoTokenizer
-
-print("=== Teste Unsloth ===\n")
-
-# 1. Testar import
+# 1. Testar import (A classe certa!)
 try:
-    from unsloth import FastSequenceClassificationModel
+    from unsloth import FastLanguageModel
     print("✅ Unsloth importado com sucesso")
 except ImportError as e:
     print(f"❌ Unsloth não disponível: {e}")
     exit(1)
+    
+import torch
+from transformers import AutoTokenizer
+
+print("=== Teste Unsloth ===\n")
 
 # 2. Testar carregamento do modelo
 model_path = "Qwen/Qwen2.5-0.5B"
 print(f"\n📦 Carregando: {model_path}")
 
 try:
-    model, tokenizer = FastSequenceClassificationModel.from_pretrained(
+    # Usando FastLanguageModel com sequence_classification=True
+    model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=model_path,
         num_labels=2,
         max_seq_length=192,
         dtype=None,
         load_in_4bit=True,
+        sequence_classification=True, 
     )
     print("✅ Modelo carregado")
     print(f"   Tipo: {type(model)}")
@@ -52,15 +53,15 @@ print("✅ Tokens configurados")
 
 # 4. Aplicar LoRA
 print("\n🔧 Aplicando LoRA...")
-model = FastSequenceClassificationModel.get_peft_model(
+model = FastLanguageModel.get_peft_model(
     model,
     r=8,
     lora_alpha=16,
     target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                   "gate_proj", "up_proj", "down_proj"],
+                    "gate_proj", "up_proj", "down_proj"],
     lora_dropout=0.0,
     bias="none",
-    use_gradient_checkpointing=True,
+    use_gradient_checkpointing="unsloth", # Otimizado para VRAM
     random_state=42,
 )
 

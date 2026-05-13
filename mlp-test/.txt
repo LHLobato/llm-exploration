@@ -1,0 +1,3 @@
+Resumo final:
+{'model_type': 'MLP', 'lr': 0.001, 'weight_decay': 0.0001, 'optimizer': 'Adam', 'regularization': 0.0, 'architecture': '[42, 256, 128, 2]', 'activation': 'ReLU', 'val_accuracy': 0.887667, 'test_accuracy': 0.881333, 'test_loss': 0.285497, 'test_precision': 0.881319, 'test_recall': 0.881363, 'test_f1': 0.881327}
+{'model_type': 'ResNet', 'lr': 0.001, 'weight_decay': 0.0001, 'optimizer': 'Adam', 'regularization': 0.2, 'hidden_dim': 128, 'num_blocks': 2, 'architecture': "{'input_dim': 42, 'hidden_dim': 128, 'num_blocks': 2}", 'val_accuracy': 0.886, 'test_accuracy': 0.883667, 'test_loss': 0.281409, 'test_precision': 0.88396, 'test_recall': 0.883512, 'test_f1': 0.883601}

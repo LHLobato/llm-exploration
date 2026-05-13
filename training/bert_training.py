@@ -39,6 +39,7 @@ parser.add_argument(
         "TinyLlama",
         "Qwen",
         "Gemma-2B",
+        "ModernBERT"
     ],
 )
 parser.add_argument(
@@ -56,6 +57,7 @@ parser.add_argument("--strategy", type=str, help="Strategy adopted")
 parser.add_argument("--num_epochs", type=int, help="Número de épocas")
 parser.add_argument("--check", action="store_true", help="Resume from checkpoint")
 parser.add_argument("--optuna", action="store_true")
+parser.add_argument("--sample", action="store_true")
 args = parser.parse_args()
 
 
@@ -169,16 +171,39 @@ elif args.dataset == "domain-enriched":
 
     strategy = "prompt" if args.strategy == "tokenized" else "name"
 
-    df_train = pd.read_csv(f"../data/acme/train.csv", index_col=False)
-    df_val = pd.read_csv(f"../data/acme/val.csv", index_col=False)
-    df_test = pd.read_csv(f"../data/acme/test.csv", index_col=False)
+    df_train = pd.read_csv(f"../data/acme/fixed_train.csv", index_col=False)
+    df_val = pd.read_csv(f"../data/acme/fixed_val.csv", index_col=False)
+    df_test = pd.read_csv(f"../data/acme/fixed_test.csv", index_col=False)
     X_train = df_train[strategy].values
     X_val = df_val[strategy].values
     X_test = df_test[strategy].values
-    
     y_train = df_train["malicious"].values
     y_val = df_val["malicious"].values
     y_test = df_test["malicious"].values
+
+    if args.sample:
+        X_train, _, y_train, _ = train_test_split(
+            X_train, y_train,
+            train_size=150000,
+            random_state=0,
+            stratify=y_train
+        )
+
+        X_val, _, y_val, _ = train_test_split(
+            X_val, y_val,
+            train_size=35000,
+            random_state=0,
+            stratify=y_val
+        )
+
+        X_test, _, y_test, _ = train_test_split(
+            X_test, y_test,
+            train_size=35000,
+            random_state=0,
+            stratify=y_test
+        )
+
+
 
 print("\n--- Tamanho dos Conjuntos ---")
 print(f"Treino:    {len(X_train)} amostras")
@@ -205,7 +230,7 @@ if args.model in LLM_MODELS:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right" if args.model == "Gemma-2B" else "left"
-elif args.model == "DEBERTa":
+elif args.model in["DEBERTa", "ModernBERT"] :
     print("debertaa")
     optim = "adamw_8bit"
 else:
@@ -245,7 +270,7 @@ def preprocess_function(examples):
         formatted = [format_chat_prompt(p) for p in examples["prompt"]]
         return tokenizer(formatted, truncation=True, max_length=160)
     else:
-        return tokenizer(examples["prompt"], truncation=True, max_length=128)
+        return tokenizer(examples["prompt"], truncation=True, max_length=64)
 
 
 id2label = {0: "Benign", 1: "Malicious"}
@@ -342,8 +367,8 @@ tokenized_datasets = raw_datasets.map(preprocess_function, batched=True)
 data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
 
-if args.model == "distilBERT":
-    batch_size = 32
+if args.model in ["distilBERT", "ModernBERT"]:
+    batch_size = 8
 
 elif args.model in ["BERT-Base", "DEBERTa"]:
     batch_size = 16
@@ -369,7 +394,7 @@ training_args = TrainingArguments(
     learning_rate=lr,
     per_device_train_batch_size=batch_size,
     per_device_eval_batch_size=batch_size,
-    gradient_accumulation_steps=4,
+    gradient_accumulation_steps=8,
     num_train_epochs=args.num_epochs,
     logging_strategy="epoch",
     eval_strategy="epoch",

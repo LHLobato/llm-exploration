@@ -9,14 +9,15 @@ echo "========================================================="
 
 
 
-echo "[1/2] A iniciar Qwen 3.5 0.8B Instruct..."
-python ../training/bert_training.py \
+echo "[1/2] A iniciar Qwen Instruct..."
+python ../training/optimized_training.py \
   --model Qwen \
   --modelpath Qwen/Qwen3.5-0.8B \
   --dataset domain-enriched \
   --parameters 0.8B \
   --strategy tokenized \
-  --num_epochs 1 \
+  --use_unsloth \
+  --num_epochs 3 \
   --dora
 
 echo "---------------------------------------------------------"
