@@ -1,19 +1,28 @@
 import pandas as pd
 from pathlib import Path
 
-
-def load_dataset_from_disk(image_path: str, domain_df:pd.DataFrame) -> list:
-
+def load_dataset_from_disk(image_path: str, domain_df: pd.DataFrame):
     base = Path(image_path)
+    EXTENSIONS = {'.png', '.jpg', '.jpeg'}
+    label_map = {'malicious': 1, 'normal': 0}
 
-    malicious_files = [f.stem for f in (base / 'malicious').iterdir() if f.is_file()]
-    benign_files    = [f.stem for f in (base / 'benign').iterdir() if f.is_file()]
+    rows = []
+    for folder in sorted(base.iterdir()):
+        if not folder.is_dir():
+            continue
+        label = label_map.get(folder.name.lower(), -1)
+        for f in sorted(folder.iterdir()):
+            if f.suffix.lower() in EXTENSIONS:
+                domain = f.stem.split('-', 1)[-1]
+                rows.append({'image_path': f, 'name': domain, 'label': label})
 
-    all_files = malicious_files + benign_files
-    all_domains = [s.split('-', 1)[-1] for s in all_files]
-    valid_domain = domain_df[domain_df['name'].isin(all_domains)]
-    print(f"[IMAGES] {len(all_files)}")
-    print(f"[DOMAINS] {len(domain_df)}")
-    print(f"[SUCCESS-RATE] {(len(valid_domain)/len(domain_df)):.2f}%!!!")
+    files_df = pd.DataFrame(rows)
 
-    return valid_domain
+    merged = files_df.merge(domain_df, on='name', how='inner')
+
+    print(f"[IMAGES]       {len(files_df)}")
+    print(f"[DOMAINS]      {len(domain_df)}")
+    print(f"[MATCHED]      {len(merged)}")
+    print(f"[SUCCESS-RATE] {len(merged)/len(domain_df):.2%}")
+
+    return merged

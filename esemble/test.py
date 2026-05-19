@@ -1,21 +1,69 @@
+import pandas as pd
 from multimodal import Domain_Ensemble
 from data import load_dataset_from_disk
 from argparse import ArgumentParser
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import classification_report, roc_auc_score
 
 parser = ArgumentParser()
-parser.add_argument("--image_path", type=str, help="images dataset")
-parser.add_argument("--llm_path", type=str, help="pre-trained llm path")
-parser.add_argument("--cnn_path", type=str, help="pre-trained cnn path")
-parser.add_argument("--tab_path", type=str, help="pre-trained tabular model path")
-
+parser.add_argument("--train_img_path", type=str)
+parser.add_argument("--test_img_path", type=str)
+parser.add_argument("--llm_path", type=str)
+parser.add_argument("--cnn_path", type=str)
+parser.add_argument("--tab_path", type=str)
 args = parser.parse_args()
 
+FEATURE_COLS_TO_DROP = ["name", "malicious", "prompt", "image_path", "label"]
 
-#IMAGE_PATH = "/home/lhslobato/novo-reshaping/images/GADF/val"
-domain_df = pd.read_csv("../data/acme/val.csv")
+def main():
+    domain_df = pd.read_csv("../data/acme/val.csv")
+    domain_test_df = pd.read_csv("../data/acme/test.csv")
 
-IMG_PATH = args.img_path
-LLM_PATH = args.llm_path
-MLP_PATH = args.tab_path
 
-print(len(load_dataset_from_disk(IMAGE_PATH)))
+    train_df = load_dataset_from_disk(args.train_img_path, domain_df)
+    test_df  = load_dataset_from_disk(args.test_img_path, domain_test_df)
+
+    scaler = MinMaxScaler()
+    train_features = scaler.fit_transform(train_df.drop(columns=FEATURE_COLS_TO_DROP, errors='ignore').values)
+    test_features  = scaler.transform(test_df.drop(columns=FEATURE_COLS_TO_DROP, errors='ignore').values)
+
+    train_prompts = train_df['prompt'].values
+    test_prompts  = test_df['prompt'].values
+
+    train_labels = train_df['label'].values
+    test_labels  = test_df['label'].values
+
+    ensemble = Domain_Ensemble(
+        cnn_path=args.cnn_path,
+        tabular_path=args.tab_path,
+        llm_path=args.llm_path
+    )
+
+
+    ensemble.fit(
+        train_df['image_path'].tolist(),
+        train_features,
+        train_prompts,
+        train_labels
+    )
+
+    preds = ensemble.predict(
+        test_df['image_path'].tolist(),
+        test_features,
+        test_prompts
+    )
+
+    proba = ensemble.predict_proba(
+        test_df['image_path'].tolist(),
+        test_features,
+        test_prompts
+    )
+
+    print("[REPORT] :")
+    print(classification_report(test_labels, pred))
+    print("[AUC]: ")
+    print(roc_auc_score(test_labels, proba))
+
+
+if __name__ == "__main__":
+    main()
