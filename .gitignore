@@ -1,7 +1,7 @@
 # CSV files (except those in /results)
 *.csv
 !results/**/*.csv
-
+!mlp-test/**/*.csv
 # Model files
 *.safetensors
 *.pth

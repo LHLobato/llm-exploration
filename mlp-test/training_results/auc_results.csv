@@ -1,0 +1,3 @@
+model,auc,checkpoint
+MLP,0.965082,training_results/models/best_mlp.pt
+ResNet,0.965299,training_results/models/best_resnet.pt
