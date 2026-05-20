@@ -1,5 +1,5 @@
 import pandas as pd
-from multimodal import Domain_Ensemble
+from multimodal import Domain_Ensemble, tprint
 from data import load_dataset_from_disk
 from argparse import ArgumentParser
 from sklearn.preprocessing import MinMaxScaler
@@ -19,7 +19,6 @@ def main():
     domain_df = pd.read_csv("../data/acme/val.csv")
     domain_test_df = pd.read_csv("../data/acme/test.csv")
 
-
     train_df = load_dataset_from_disk(args.train_img_path, domain_df)
     test_df  = load_dataset_from_disk(args.test_img_path, domain_test_df)
 
@@ -35,7 +34,7 @@ def main():
 
     ensemble = Domain_Ensemble(
         cnn_path=args.cnn_path,
-        tabular_path=args.tab_path,
+        tab_path=args.tab_path,
         llm_path=args.llm_path
     )
 
@@ -59,10 +58,10 @@ def main():
         test_prompts
     )
 
-    print("[REPORT] :")
-    print(classification_report(test_labels, pred))
-    print("[AUC]: ")
-    print(roc_auc_score(test_labels, proba))
+    tprint("[REPORT] :")
+    tprint(classification_report(test_labels, pred))
+    tprint("[AUC]: ")
+    tprint(roc_auc_score(test_labels, proba))
 
 
 if __name__ == "__main__":

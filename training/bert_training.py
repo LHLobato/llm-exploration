@@ -268,10 +268,15 @@ def format_chat_prompt(prompt_text: str) -> str:
 def preprocess_function(examples):
     if args.model in CHAT_TEMPLATE_MODELS:
         formatted = [format_chat_prompt(p) for p in examples["prompt"]]
-        return tokenizer(formatted, truncation=True, max_length=160)
     else:
-        return tokenizer(examples["prompt"], truncation=True, max_length=64)
+        formatted = [f"{SYSTEM_INSTRUCTION}\n\n{p}" for p in examples["prompt"]]
 
+    return tokenizer(
+        formatted,
+        truncation=True,
+        padding=True,
+        max_length=160,
+    )
 
 id2label = {0: "Benign", 1: "Malicious"}
 label2id = {"Benign": 0, "Malicious": 1}
@@ -431,7 +436,7 @@ if args.optuna:
             quantization_config=bnb_config,
             device_map="auto" if bnb_config else None,
         )
-        
+
         if args.model == "Gemma-2B":
             temp_model.config.pad_token_id = tokenizer.pad_token_id
 
@@ -447,13 +452,13 @@ if args.optuna:
                 use_dora=True,
                 r=16,
                 lora_alpha=32,
-                target_modules=target_modules, 
+                target_modules=target_modules,
                 task_type=TaskType.SEQ_CLS,
                 bias="none",
                 lora_dropout=0.05,
             )
             temp_model = get_peft_model(temp_model, l_config)
-        
+
         return temp_model
 
     def hp_space(trial):
@@ -481,9 +486,9 @@ if args.optuna:
 
     print("\n--- Iniciando Grid/Bayesian Search com Optuna (10k samples) ---")
     best_run = trainer.hyperparameter_search(
-        direction="maximize", 
-        backend="optuna", 
-        hp_space=hp_space, 
+        direction="maximize",
+        backend="optuna",
+        hp_space=hp_space,
         n_trials=6
     )
 

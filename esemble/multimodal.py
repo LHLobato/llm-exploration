@@ -18,30 +18,71 @@ import torch.backends.cudnn as cudnn
 from pyts.image import GramianAngularField
 from sklearn.feature_extraction.text import TfidfVectorizer
 from transformers import BitsAndBytesConfig
+from CNN import build_model
+from datetime import datetime
+from MLP import MultiLayerPerceptron
+
+def tprint(*args, **kwargs):
+    """Print com timestamp automático."""
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print(f"{timestamp} |", *args, **kwargs)
+
+
+
+SYSTEM_INSTRUCTION = (
+    "You are a cybersecurity classifier. "
+    "Analyze the domain record below and classify it as benign or malicious."
+)
+
+def make_loader(ds: TensorDataset, shuffle: bool = False) -> DataLoader:
+    return DataLoader(ds, batch_size=64, shuffle=shuffle,
+                      num_workers=8, pin_memory=True)
+
+def prepare_dataset(df: pd.DataFrame, n_samples: int | None = None,
+                    random_state: int = 42) -> TensorDataset:
+    if n_samples is not None and n_samples < len(df):
+        # Amostragem estratificada por classe para manter proporção malicioso/benigno
+        df = (
+            df.groupby('malicious', group_keys=False)
+              .apply(lambda g: g.sample(
+                  min(len(g), round(n_samples * len(g) / len(df))),
+                  random_state=random_state))
+        )
+    X = torch.tensor(
+        df.drop(columns=['malicious', 'name', 'prompt'], errors='ignore').values,
+        dtype=torch.float32
+    )
+    y = torch.tensor(df['malicious'].values, dtype=torch.long)
+    return TensorDataset(X, y)
 
 
 class TextInferenceDataset(Dataset):
-    def __init__(self, texts, tokenizer, max_len=128):
+    def __init__(self, texts, tokenizer, max_len=160):
         self.texts = texts
         self.tokenizer = tokenizer
         self.max_len = max_len
 
+    def _format(self, text: str) -> str:
+        messages = [{"role": "user", "content": f"{SYSTEM_INSTRUCTION}\n\n{text}"}]
+        return self.tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+
     def __len__(self):
-        return len(self.texts)
+            return len(self.texts)
 
     def __getitem__(self, idx):
-        text = self.texts[idx]
         encoding = self.tokenizer(
-            text,
-            truncation=True,
-            padding='max_length',
-            max_length=self.max_len,
-            return_tensors='pt'
-        )
+                self._format(self.texts[idx]),
+                truncation=True,
+                padding='max_length',
+                max_length=self.max_len,
+                return_tensors='pt'
+            )
         return {
-            'input_ids': encoding['input_ids'].flatten(),
-            'attention_mask': encoding['attention_mask'].flatten()
-        }
+                'input_ids': encoding['input_ids'].flatten(),
+                'attention_mask': encoding['attention_mask'].flatten()
+            }
 
 
 class ImagePathDataset(Dataset):
@@ -49,10 +90,8 @@ class ImagePathDataset(Dataset):
     def __init__(self, image_paths, transform=None):
         self.image_paths = image_paths
         self.transform = transform or transforms.Compose([
-            transforms.Resize((224, 224)),
+            transforms.Resize((42, 42)),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
         ])
 
     def __len__(self):
@@ -63,11 +102,13 @@ class ImagePathDataset(Dataset):
         return self.transform(img)
 
 class Domain_Ensemble:
-    def __init__(self, cnn_path, tabular_path, llm_path, device='cuda'):
+    def __init__(self, cnn_path, tab_path, llm_path, device='cuda'):
         self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
-        self.vision_model = timm.create_model('convnext_nano', pretrained=False, num_classes=2)
+        arch = {"name": "mid_3b_b", "blocks": [(32, 3, True),  (64, 3, True),  (128, 3, True)]}
+        fc_dims = [512]
+        self.vision_model = build_model(arch=arch, fc_dims=fc_dims, dropout=0.5, use_bn=True)
 
-        print(f"[LOAD] CNN...")
+        tprint(f"[LOAD] CNN...")
         try:
             checkpoint = torch.load(cnn_path, map_location=self.device, weights_only=False)
             if 'model_state_dict' in checkpoint:
@@ -82,7 +123,7 @@ class Domain_Ensemble:
         self.vision_model.to(self.device)
         self.vision_model.eval()
 
-        print("[LOAD] LLM...")
+        tprint("[LOAD] LLM...")
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
@@ -99,11 +140,35 @@ class Domain_Ensemble:
         self.llm_model.eval()
         self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_path)
 
-        print("[LOAD] Tabular model...")
-        self.tabular_model = joblib.load(tabular_path)
+        tprint(f"[LOAD] Tabular model...")
+        runs = {
+            'model_type':     'MLP',
+            'architecture':   [42, 256, 128, 64, 2],
+            'activation':     nn.ReLU,
+            'regularization': 0.0,
+            'model_kwargs':   {},
+            }
+
+        self.tab_model = MultiLayerPerceptron(
+            runs['architecture'],
+            runs['regularization'],
+            runs['activation'],
+        ).to(self.device)
+
+        try:
+            checkpoint = torch.load(tab_path, map_location=self.device, weights_only=True)
+            if 'model_state_dict' in checkpoint:
+                state_dict_to_load = checkpoint['model_state_dict']
+            else:
+                state_dict_to_load = checkpoint
+
+            self.tab_model.load_state_dict(state_dict_to_load)
+
+        except Exception as e:
+            raise RuntimeError(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | [ERROR]: {e}")
 
         self.clf = LogisticRegression(random_state=42, max_iter=1000)
-        print("[LOAD] Individual Models Loaded...")
+        tprint(f"[LOAD] Individual Models Loaded...")
 
     def _resolve_image_loader(self, X_image, batch_size):
         if isinstance(X_image, (np.ndarray, torch.Tensor)):
@@ -165,12 +230,12 @@ class Domain_Ensemble:
 
         preds_vision = np.concatenate(all_features, axis=0)
 
-        print("[LLM] Predicting...")
+        tprint("[LLM] Predicting...")
         text_dataset = TextInferenceDataset(X_text_raw, self.llm_tokenizer)
         text_loader = DataLoader(text_dataset, batch_size=batch_size, shuffle=False)
         all_preds_llm = []
         with torch.no_grad():
-            for batch in tqdm(text_loader, desc="  llm predict"):
+            for batch in tqdm(text_loader, desc="llm predict"):
                 input_ids = batch['input_ids'].to(self.device)
                 attention_mask = batch['attention_mask'].to(self.device)
                 with torch.cuda.amp.autocast(enabled=self.device.type == 'cuda'):
@@ -180,10 +245,21 @@ class Domain_Ensemble:
 
         preds_llm = np.concatenate(all_preds_llm, axis=0)[:, 1].reshape(-1, 1)
 
-        print("[TABULAR] Predicting...")
-        preds_tabular = self.tabular_model.predict_proba(X_tabular)[:, 1].reshape(-1, 1)
+        tprint("[TABULAR] Predicting...")
+        feat_ds   = prepare_dataset(X_tabular, len(X_tabular))
+        feat_loader   = make_loader(feat_ds)
 
-        return preds_vision, preds_llm, preds_tabular
+        all_preds_tab = []
+        with torch.no_grad():
+            for batch in tqdm(feat_loader, desc="Tabular Predictions"):
+                outputs = self.tab_model(batch[0])
+                probs = torch.softmax(outputs, dim=-1).detach().cpu().numpy()
+                all_preds_tab.append(probs)
+
+        preds_tab = np.concatenate(all_preds_tab, axis=0)[:, 1].reshape(-1, 1)
+
+
+        return preds_vision, preds_llm, preds_tab
 
     def fit(self, X_image, X_val_tabular, X_val_text_raw, y_val):
         """
@@ -194,14 +270,14 @@ class Domain_Ensemble:
             - list de paths para imagens
             - str / Path de diretório raiz
         """
-        print("[TRAIN] Collecting predictions from validation set...")
+        tprint("[TRAIN] Collecting predictions from validation set...")
         p_vision, p_llm, p_tabular = self._get_base_predictions(X_image, X_val_tabular, X_val_text_raw)
 
         X_meta_train = np.hstack((p_vision, p_llm, p_tabular))
 
-        print("[TRAIN] Training meta-model...")
+        tprint("[TRAIN] Training meta-model...")
         self.clf.fit(X_meta_train, y_val)
-        print("[TRAIN] Meta-model training finished!")
+        tprint("[TRAIN] Meta-model training finished!")
 
     def predict_proba(self, X_image, X_tabular, X_text_raw):
         """
