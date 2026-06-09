@@ -60,7 +60,8 @@ def get_args():
             "httpparams",
             "lim",
             "phiusiil",
-            "10ksubset",
+            "10ksubset-phiusiil",
+            "10ksubset-custom",
         ],
     )
     parser.add_argument(
@@ -249,15 +250,18 @@ def main(args):
                 X_test, y_test, train_size=35000, random_state=0, stratify=y_test
             )
 
-    elif args.dataset == "10ksubset":
+    elif "10ksubset" in args.dataset:
+        df = pd.read_csv(f"../data/{args.dataset}.csv", index_col=False)
         if args.strategy == "tokenized-prompt":
-            df = pd.read_csv("../data/10ksubset.csv", index_col=False)
             names = df["prompt"].values
-
         else:
-            df = pd.read_csv("../data/10ksubset.csv", index_col=False)
-            names = df["Domain"].values
-        labels = df["label"].values
+            if "phiusiil" in args.dataset:
+                names = df["Domain"].values
+                labels = df["label"].values
+
+            else:
+                names = df["name"].values
+                labels = df["malicious"].values
 
         names = remove_www_prefix(names)
 
