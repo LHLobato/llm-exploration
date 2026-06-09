@@ -4,7 +4,7 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 from huggingface_hub import login
 
-login(token="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")
+login(token="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")
 
 import argparse
 
@@ -128,7 +128,7 @@ elif args.dataset == "phiusiil":
         names = df['prompt'].values
 
     else:
-        df = pd.read_csv("../data/PhiUSIIL/PhiUSIIL.csv", index_col=False)
+        df = pd.read_csv("../data/PhiUSIIL/phiusiil-filtered.csv", index_col=False)
         names = df['Domain'].values
     labels = df['label'].values
 
@@ -275,7 +275,7 @@ def preprocess_function(examples):
         formatted,
         truncation=True,
         padding=True,
-        max_length=160,
+        max_length=200,
     )
 
 id2label = {0: "Benign", 1: "Malicious"}
@@ -376,7 +376,7 @@ if args.model in ["distilBERT", "ModernBERT"]:
     batch_size = 8
 
 elif args.model in ["BERT-Base", "DEBERTa"]:
-    batch_size = 16
+    batch_size = 8
 
 elif args.model in ["Llama-3", "Qwen"]:
     batch_size = 32
@@ -516,7 +516,7 @@ logits = predictions.predictions
 labels = predictions.label_ids
 metrics = compute_metrics((logits, labels))
 
-path = "../results/bert-classifier.csv"
+path = "../results/phiusiil-results.csv"
 exists = os.path.exists(path)
 
 pd.DataFrame(

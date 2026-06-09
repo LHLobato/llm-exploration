@@ -18,7 +18,7 @@ def load_dataset_from_disk(image_path: str, domain_df: pd.DataFrame):
 
     files_df = pd.DataFrame(rows)
 
-    merged = files_df.merge(domain_df, on='name', how='inner')
+    merged = files_df.merge(domain_df, on='name', how='inner').drop_duplicates()
 
     print(f"[IMAGES]       {len(files_df)}")
     print(f"[DOMAINS]      {len(domain_df)}")

@@ -23,8 +23,13 @@ def main():
     test_df  = load_dataset_from_disk(args.test_img_path, domain_test_df)
 
     scaler = MinMaxScaler()
-    train_features = scaler.fit_transform(train_df.drop(columns=FEATURE_COLS_TO_DROP, errors='ignore').values)
-    test_features  = scaler.transform(test_df.drop(columns=FEATURE_COLS_TO_DROP, errors='ignore').values)
+    tab_cols = [c for c in train_df.columns if c not in FEATURE_COLS_TO_DROP]
+
+    scaler = MinMaxScaler()
+    train_df[tab_cols] = scaler.fit_transform(train_df[tab_cols])
+    test_df[tab_cols]  = scaler.transform(test_df[tab_cols])
+
+
 
     train_prompts = train_df['prompt'].values
     test_prompts  = test_df['prompt'].values
@@ -41,28 +46,34 @@ def main():
 
     ensemble.fit(
         train_df['image_path'].tolist(),
-        train_features,
+        train_df,          
         train_prompts,
         train_labels
     )
-
     preds = ensemble.predict(
         test_df['image_path'].tolist(),
-        test_features,
+        test_df,
         test_prompts
     )
+
+    
+    tprint("[REPORT] :")
+    tprint(classification_report(test_labels, preds))
 
     proba = ensemble.predict_proba(
         test_df['image_path'].tolist(),
-        test_features,
+        test_df,
         test_prompts
     )
 
-    tprint("[REPORT] :")
-    tprint(classification_report(test_labels, pred))
     tprint("[AUC]: ")
-    tprint(roc_auc_score(test_labels, proba))
-
+    tprint(roc_auc_score(test_labels, proba[:, 1]))
+    tprint("[META-MODEL COEFFICIENTS]:")
+    feature_names = ["CNN", "MLP", "LLM"]
+    coefs = ensemble.meta_model.coef_[0]
+    for name, coef in zip(feature_names, coefs):
+        tprint(f"  {name}: {coef:.4f}")
+    tprint(f"  Intercept: {ensemble.meta_model.intercept_[0]:.4f}")
 
 if __name__ == "__main__":
     main()

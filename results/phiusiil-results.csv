@@ -1,0 +1,9 @@
+model,strategy,accuracy,auc,f1-score
+distilbert-base-uncased-phiusiil-None,,0.8893,0.9394,0.884
+google-bert/bert-base-uncased-phiusiil-None,,0.8887,0.9415,0.8835
+answerdotai/ModernBERT-base-phiusiil-None,,0.8873,0.9418,0.8831
+microsoft/deberta-v3-base-phiusiil-None,,0.8918,0.9449,0.8871
+distilbert-base-uncased-phiusiil-None,tokenized-prompt,0.9998,1.0,0.9998
+google-bert/bert-base-uncased-phiusiil-None,tokenized-prompt,0.9999,1.0,0.9999
+answerdotai/ModernBERT-base-phiusiil-None,tokenized-prompt,0.9999,1.0,0.9999
+microsoft/deberta-v3-base-phiusiil-None,tokenized-prompt,0.9999,1.0,0.9999

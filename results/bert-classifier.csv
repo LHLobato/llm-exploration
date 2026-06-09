@@ -60,3 +60,4 @@ answerdotai/ModernBERT-base-domain-enriched-None,tokenized,0.9115,0.9701,0.9115
 answerdotai/ModernBERT-base-domain-enriched-None,tokenized,0.9191,0.974,0.9191
 answerdotai/ModernBERT-large-domain-enriched-None,tokenized,0.9207,0.9752,0.9207
 answerdotai/ModernBERT-large-domain-enriched-None,only-names,0.8316,0.9169,0.8315
+google-bert/bert-base-uncased-domain-enriched-None,tokenized,0.9207,0.9731,0.9206

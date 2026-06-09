@@ -1,3 +1,4 @@
+from peft import PeftModel
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset, Dataset
@@ -27,6 +28,9 @@ def tprint(*args, **kwargs):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     print(f"{timestamp} |", *args, **kwargs)
 
+from huggingface_hub import login
+
+login(token="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")
 
 
 SYSTEM_INSTRUCTION = (
@@ -49,7 +53,7 @@ def prepare_dataset(df: pd.DataFrame, n_samples: int | None = None,
                   random_state=random_state))
         )
     X = torch.tensor(
-        df.drop(columns=['malicious', 'name', 'prompt'], errors='ignore').values,
+        df.drop(columns=['malicious', 'name', 'prompt','label','image_path'], errors='ignore').values,
         dtype=torch.float32
     )
     y = torch.tensor(df['malicious'].values, dtype=torch.long)
@@ -129,15 +133,21 @@ class Domain_Ensemble:
             bnb_4bit_use_double_quant=True,
             bnb_4bit_compute_dtype=torch.bfloat16,
         )
-
         self.llm_model = AutoModelForSequenceClassification.from_pretrained(
-            llm_path,
-            quantization_config=bnb_config,
-            num_labels=2
+           "meta-llama/Llama-3.2-1B-Instruct"
         )
+
+        # Aplica o adapter
+        self.llm_model = PeftModel.from_pretrained(self.llm_model, llm_path)
+        self.llm_model.eval()
         self.llm_model.to(self.device)
         self.llm_model.eval()
-        self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_path)
+
+
+        self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_path , local_files_only=True)
+        
+        self.llm_tokenizer.pad_token = self.llm_tokenizer.eos_token
+        self.llm_model.config.pad_token_id = self.llm_tokenizer.eos_token_id
 
         tprint(f"[LOAD] Tabular model...")
         runs = {
@@ -213,7 +223,7 @@ class Domain_Ensemble:
             ), X_image  # retorna também os paths resolvidos
 
         raise TypeError(f"X_image inválido: {type(X_image)}")
-    def _get_base_predictions(self, X_image, X_tabular, X_text_raw, batch_size=256):
+    def _get_base_predictions(self, X_image, X_tabular, X_text_raw, batch_size=32):
         """Gera previsões dos modelos base."""
 
         image_loader, resolved_paths = self._resolve_image_loader(X_image, batch_size)
@@ -221,7 +231,7 @@ class Domain_Ensemble:
 
         all_features = []
         with torch.no_grad():
-            for batch in tqdm(image_loader, desc="Vision Predict"):
+            for batch in tqdm(image_loader, desc=f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | [VISION Predict]"):
                 # TensorDataset retorna (tensor,); ImagePathDataset retorna tensor direto
                 image_batch = (batch[0] if isinstance(batch, (list, tuple)) else batch).to(self.device)
                 features_batch = self.vision_model(image_batch)
@@ -234,7 +244,7 @@ class Domain_Ensemble:
         text_loader = DataLoader(text_dataset, batch_size=batch_size, shuffle=False)
         all_preds_llm = []
         with torch.no_grad():
-            for batch in tqdm(text_loader, desc="llm predict"):
+            for batch in tqdm(text_loader, desc=f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | [LLM Predict]"):
                 input_ids = batch['input_ids'].to(self.device)
                 attention_mask = batch['attention_mask'].to(self.device)
                 with torch.cuda.amp.autocast(enabled=self.device.type == 'cuda'):
@@ -245,13 +255,16 @@ class Domain_Ensemble:
         preds_llm = np.concatenate(all_preds_llm, axis=0)[:, 1].reshape(-1, 1)
 
         tprint("[TABULAR] Predicting...")
-        feat_ds   = prepare_dataset(X_tabular, len(X_tabular))
+        feat_ds = prepare_dataset(
+                X_tabular,  # mantém o label pra prepare_dataset
+                len(X_tabular)
+            )
         feat_loader   = make_loader(feat_ds)
 
         all_preds_tab = []
         with torch.no_grad():
-            for batch in tqdm(feat_loader, desc="Tabular Predictions"):
-                outputs = self.tab_model(batch[0])
+            for batch in tqdm(feat_loader, desc=f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | [TABULAR Predict]"):
+                outputs = self.tab_model(batch[0].to(self.device))
                 probs = torch.softmax(outputs, dim=-1).detach().cpu().numpy()
                 all_preds_tab.append(probs)
 
