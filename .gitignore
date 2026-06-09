@@ -9,3 +9,5 @@
 *.json
 /models
 */__pycache__
+*.model
+*.bin
