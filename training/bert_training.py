@@ -1,18 +1,12 @@
-import os
-
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-
-from huggingface_hub import login
-
-login(token="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")
-
 import argparse
+import os
 
 import evaluate
 import numpy as np
 import pandas as pd
 import torch
 from datasets import Dataset, DatasetDict
+from huggingface_hub import login
 from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
 from scipy.special import softmax
 from sklearn.model_selection import train_test_split
@@ -26,6 +20,9 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
+
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+login(token="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")
 
 
 def get_args():
