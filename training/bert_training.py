@@ -187,7 +187,7 @@ def main(args):
         labels = df["label"].values
 
         """
-        N_SAMPLES = 50000
+        N_SAMPLES = 36000
 
             if N_SAMPLES and N_SAMPLES < len(names):
                 print(f"Modo de Teste: Extraindo uma amostra estratificada de {N_SAMPLES} domínios...")
@@ -198,7 +198,8 @@ def main(args):
                     stratify=labels
             )
         """
-        names = remove_www_prefix(names)
+        if args.strategy != "tokenized-prompt":
+            names = remove_www_prefix(names)
 
         X_train, X_temp, y_train, y_temp = train_test_split(
             names, labels, test_size=0.30, random_state=0, stratify=labels
@@ -331,6 +332,7 @@ def main(args):
         optim = "adamw_8bit"
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "right" if args.model == "Gemma-2B" else "left"
     elif args.model in ["DEBERTa", "ModernBERT"]:
         print("debertaa")
@@ -367,7 +369,7 @@ def main(args):
         )
         model.eval()
 
-    if args.model == "Gemma-2B":
+    if args.model in LLM_MODELS:  # era só Gemma-2B
         model.config.pad_token_id = tokenizer.pad_token_id
 
     if args.model == "DEBERTa":

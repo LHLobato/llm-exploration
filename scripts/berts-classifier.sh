@@ -10,15 +10,15 @@ for i in "${!MODELS[@]}"; do
     path=${PATHS[$i]}
     model=${MODELS[$i]}
     echo "Rodando: $model (Caminho: $path)"
-    
+
     python ../training/bert_training.py \
         --model "$model" \
         --modelpath "$path" \
-        --dataset phiusiil \
-        --strategy "only-names" \
+        --dataset domain-enriched \
+        --strategy "name" \
         --num_epochs 3 \
-        --dora
-        
+        --dora --train_mode tuning
+
     echo "Finalizado: $model"
     echo "----------------------------------"
 done
