@@ -26,6 +26,9 @@ load_dotenv()
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 login(token=os.getenv("HF_TOKEN"))
 
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+login(token="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")
+
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -199,10 +202,7 @@ def main(args):
 
         if args.strategy != "tokenized-prompt":
             names = remove_www_prefix(names)
-
-        X_train, X_temp, y_train, y_temp = train_test_split(
-            names, labels, test_size=0.30, random_state=0, stratify=labels
-        )
+        
 
         X_val, X_test, y_val, y_test = train_test_split(
             X_temp, y_temp, test_size=0.50, random_state=0, stratify=y_temp

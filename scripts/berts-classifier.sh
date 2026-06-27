@@ -16,10 +16,16 @@ for i in "${!MODELS[@]}"; do
         --model "$model" \
         --modelpath "$path" \
         --dataset domain-enriched \
+<<<<<<< HEAD
         --batch 64 \
         --strategy "only-names" \
         --num_epochs 5 \
         --train_mode tuning
+=======
+        --strategy "name" \
+        --num_epochs 3 \
+        --dora --train_mode tuning
+>>>>>>> d4b83e822435d191a649079d72d80de8e083888b
 
     echo "Finalizado: $model"
     echo "----------------------------------"
