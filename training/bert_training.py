@@ -1,18 +1,12 @@
-import os
-
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-
-from huggingface_hub import login
-
-login(token="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")
-
 import argparse
+import os
 
 import evaluate
 import numpy as np
 import pandas as pd
 import torch
 from datasets import Dataset, DatasetDict
+from huggingface_hub import login
 from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
 from scipy.special import softmax
 from sklearn.model_selection import train_test_split
@@ -26,6 +20,11 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
+from dotenv import load_dotenv
+
+load_dotenv()
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+login(token=os.getenv("HF_TOKEN"))
 
 
 def get_args():
@@ -41,7 +40,7 @@ def get_args():
             "Llama-3",
             "TinyLlama",
             "Qwen",
-            "Gemma-2B",
+            "Gemma",
             "ModernBERT",
         ],
     )
@@ -60,7 +59,8 @@ def get_args():
             "httpparams",
             "lim",
             "phiusiil",
-            "10ksubset",
+            "10ksubset-phiusiil",
+            "10ksubset-custom",
         ],
     )
     parser.add_argument(
@@ -74,23 +74,21 @@ def get_args():
     parser.add_argument("--strategy", type=str, help="Strategy adopted")
     parser.add_argument("--num_epochs", type=int, help="Número de épocas")
     parser.add_argument("--check", action="store_true", help="Resume from checkpoint")
+    parser.add_argument("--batch", type=int, default=32, help="Batch")
     parser.add_argument("--optuna", action="store_true")
     parser.add_argument("--sample", action="store_true")
     return parser.parse_args()
 
 
-CHAT_TEMPLATE_MODELS = ["Llama-3", "Qwen", "Gemma-2B", "TinyLlama"]
+CHAT_TEMPLATE_MODELS = ["Llama-3", "Qwen", "Gemma", "TinyLlama"]
 
 
-LLM_MODELS = ["Llama-3", "TinyLlama", "Qwen", "Gemma-2B"]
+LLM_MODELS = ["Llama-3", "TinyLlama", "Qwen", "Gemma"]
 SYSTEM_INSTRUCTION = (
     "You are a cybersecurity classifier. "
     "Analyze the domain record below and classify it as benign or malicious. Use 0 for benign and 1 for malicious"
 )
 
-# ---------------------------------------------------------------------------
-# Métricas
-# ---------------------------------------------------------------------------
 accuracy = evaluate.load("accuracy")
 auc_score = evaluate.load("roc_auc")
 f1 = evaluate.load("f1")
@@ -188,19 +186,19 @@ def main(args):
             names = df["Domain"].values
         labels = df["label"].values
 
-        """
-        N_SAMPLES = 50000
+        if args.sample:    
+            N_SAMPLES = 36000
 
-            if N_SAMPLES and N_SAMPLES < len(names):
-                print(f"Modo de Teste: Extraindo uma amostra estratificada de {N_SAMPLES} domínios...")
-                _, names, _, labels = train_test_split(
-                    names, labels,
-                    test_size=N_SAMPLES,
-                    random_state=0,
-                    stratify=labels
+        if N_SAMPLES and N_SAMPLES < len(names):
+            print(
+                f"Modo de Teste: Extraindo uma amostra estratificada de {N_SAMPLES} domínios..."
             )
-        """
-        names = remove_www_prefix(names)
+            _, names, _, labels = train_test_split(
+                names, labels, test_size=N_SAMPLES, random_state=0, stratify=labels
+            )
+
+        if args.strategy != "tokenized-prompt":
+            names = remove_www_prefix(names)
 
         X_train, X_temp, y_train, y_temp = train_test_split(
             names, labels, test_size=0.30, random_state=0, stratify=labels
@@ -249,15 +247,18 @@ def main(args):
                 X_test, y_test, train_size=35000, random_state=0, stratify=y_test
             )
 
-    elif args.dataset == "10ksubset":
+    elif "10ksubset" in args.dataset:
+        df = pd.read_csv(f"../data/{args.dataset}.csv", index_col=False)
         if args.strategy == "tokenized-prompt":
-            df = pd.read_csv("../data/10ksubset.csv", index_col=False)
             names = df["prompt"].values
-
         else:
-            df = pd.read_csv("../data/10ksubset.csv", index_col=False)
-            names = df["Domain"].values
-        labels = df["label"].values
+            if "phiusiil" in args.dataset:
+                names = df["Domain"].values
+                labels = df["label"].values
+
+            else:
+                names = df["name"].values
+                labels = df["malicious"].values
 
         names = remove_www_prefix(names)
 
@@ -330,7 +331,8 @@ def main(args):
         optim = "adamw_8bit"
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.padding_side = "right" if args.model == "Gemma-2B" else "left"
+            tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.padding_side = "right" if args.model == "Gemma" else "left"
     elif args.model in ["DEBERTa", "ModernBERT"]:
         print("debertaa")
         optim = "adamw_8bit"
@@ -341,7 +343,7 @@ def main(args):
     label2id = {"Benign": 0, "Malicious": 1}
 
     bnb_config = None
-    if args.model in ["Qwen", "Gemma-2B", "Llama-3", "TinyLlama"]:
+    if args.model in ["Qwen", "Gemma", "Llama-3", "TinyLlama"]:
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
@@ -366,7 +368,7 @@ def main(args):
         )
         model.eval()
 
-    if args.model == "Gemma-2B":
+    if args.model in LLM_MODELS:  # era só Gemma-2B
         model.config.pad_token_id = tokenizer.pad_token_id
 
     if args.model == "DEBERTa":
@@ -409,7 +411,7 @@ def main(args):
                 "up_proj",
                 "down_proj",
             ],
-            "Gemma-2B": [
+            "Gemma": [
                 "q_proj",
                 "v_proj",
                 "k_proj",
@@ -431,20 +433,9 @@ def main(args):
         )
         model = get_peft_model(model, lora_config)
 
-    batch_size_map = {
-        "distilBERT": 8,
-        "ModernBERT": 8,
-        "BERT-Base": 8,
-        "DEBERTa": 8,
-        "Llama-3": 32,
-        "Qwen": 32,
-        "TinyLlama": 16,
-        "Gemma-2B": 4,
-    }
-    batch_size = batch_size_map.get(args.model, 8)
 
     lr = 2e-05
-
+    batch_size = args.batch
     outputdir = (
         f"../models/{args.model}/{args.dataset}-{args.strategy}-{args.parameters}/"
     )
@@ -510,7 +501,7 @@ def main(args):
                     device_map="auto" if bnb_config else None,
                 )
 
-                if args.model == "Gemma-2B":
+                if args.model == "Gemma":
                     temp_model.config.pad_token_id = tokenizer.pad_token_id
 
                 if args.model == "DEBERTa":

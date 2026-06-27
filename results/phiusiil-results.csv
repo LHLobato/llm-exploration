@@ -7,3 +7,14 @@ distilbert-base-uncased-phiusiil-None,tokenized-prompt,0.9998,1.0,0.9998
 google-bert/bert-base-uncased-phiusiil-None,tokenized-prompt,0.9999,1.0,0.9999
 answerdotai/ModernBERT-base-phiusiil-None,tokenized-prompt,0.9999,1.0,0.9999
 microsoft/deberta-v3-base-phiusiil-None,tokenized-prompt,0.9999,1.0,0.9999
+meta-llama/Llama-3.2-1B-Instruct-phiusiil-None,only-names,0.8863,0.9424,0.8809
+google/gemma-3-1b-it-phiusiil-None,only-names,0.8851,0.9392,0.8799
+Qwen/Qwen2.5-1.5B-Instruct-phiusiil-None,only-names,0.8909,0.9474,0.8861
+meta-llama/Llama-3.2-1B-Instruct-domain-enriched-None,name,0.8337,0.917,0.8329
+google/gemma-3-1b-it-domain-enriched-None,name,0.8331,0.9154,0.8323
+Qwen/Qwen2.5-1.5B-Instruct-domain-enriched-None,name,0.8418,0.9229,0.8413
+meta-llama/Llama-3.2-1B-Instruct-phiusiil-None,tokenized-prompt,0.9995,1.0,0.9995
+google/gemma-3-1b-it-phiusiil-None,tokenized-prompt,0.9998,1.0,0.9998
+Qwen/Qwen2.5-1.5B-Instruct-phiusiil-None,tokenized-prompt,0.9994,1.0,0.9994
+distilbert/distilbert-base-uncased-domain-enriched-None,only-names,0.8296,0.9102,0.8286
+google-bert/bert-base-uncased-domain-enriched-None,only-names,0.8319,0.9111,0.8309
