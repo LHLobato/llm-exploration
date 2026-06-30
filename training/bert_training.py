@@ -95,6 +95,21 @@ auc_score = evaluate.load("roc_auc")
 f1 = evaluate.load("f1")
 
 
+def split_70_15_15(
+    X: np.ndarray,
+    y: np.ndarray,
+    random_state: int = 0,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Retorna X_train, X_val, X_test, y_train, y_val, y_test (70/15/15 estratificado)."""
+    X_train, X_temp, y_train, y_temp = train_test_split(
+        X, y, test_size=0.30, random_state=random_state, stratify=y
+    )
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_temp, y_temp, test_size=0.50, random_state=random_state, stratify=y_temp
+    )
+    return X_train, X_val, X_test, y_train, y_val, y_test
+
+
 def load_csic() -> tuple[list, list]:
     def loadData(file):
         with open(file, "r", encoding="utf8") as f:
@@ -237,58 +252,7 @@ def compute_metrics(eval_pred):
 
 
 def main(args):
-    if args.dataset == "lim":
-        col_to_get = "prompt" if args.strategy == "tokenized-prompt" else "0"
-        df = pd.read_csv("../data/less-is-more/BTCP.csv", index_col=False)
-        prompts = df[col_to_get].values
-        labels = df["label"].values
-
-        X_train, X_temp, y_train, y_temp = train_test_split(
-            prompts, labels, test_size=0.25, random_state=0, stratify=labels
-        )
-        X_val, X_test, y_val, y_test = train_test_split(
-            X_temp, y_temp, test_size=0.50, random_state=0, stratify=y_temp
-        )
-
-    elif args.dataset == "phiusiil":
-        df = pd.read_csv("../data/PhiUSIIL/phiusiil-filtered.csv", index_col=False)
-        prompts = (
-            df["prompt"].values
-            if args.strategy == "tokenized-prompt"
-            else remove_www_prefix(df["Domain"].values)
-        )
-        labels = df["label"].values
-
-        if args.sample:
-            N_SAMPLES = min(36000, len(prompts))
-            _, prompts, _, labels = train_test_split(
-                prompts, labels, test_size=N_SAMPLES, random_state=0, stratify=labels
-            )
-
-        if args.strategy != "tokenized-prompt":
-            prompts = remove_www_prefix(prompts)
-
-        X_train, X_temp, y_train, y_temp = train_test_split(
-            prompts, labels, test_size=0.30, random_state=0, stratify=labels
-        )
-        X_val, X_test, y_val, y_test = train_test_split(
-            X_temp, y_temp, test_size=0.50, random_state=0, stratify=y_temp
-        )
-
-    elif args.dataset == "domain":
-        df = pd.read_csv("../dns-feature-enrichment/csvs/dataset.csv")
-        labels = df["malicious"].values
-        prompts = df["name"].values
-        df = None
-
-        X_train, X_temp, y_train, y_temp = train_test_split(
-            prompts, labels, test_size=0.30, random_state=0, stratify=labels
-        )
-        X_val, X_test, y_val, y_test = train_test_split(
-            X_temp, y_temp, test_size=0.50, random_state=0, stratify=y_temp
-        )
-
-    elif args.dataset == "domain-enriched":
+    if args.dataset == "domain-enriched":
         strategy = "prompt" if args.strategy == "tokenized" else "name"
 
         df_train = pd.read_csv(f"../data/acme/fixed_train.csv", index_col=False)
@@ -305,63 +269,67 @@ def main(args):
             X_train, _, y_train, _ = train_test_split(
                 X_train, y_train, train_size=150000, random_state=0, stratify=y_train
             )
-
             X_val, _, y_val, _ = train_test_split(
                 X_val, y_val, train_size=35000, random_state=0, stratify=y_val
             )
-
             X_test, _, y_test, _ = train_test_split(
                 X_test, y_test, train_size=35000, random_state=0, stratify=y_test
             )
 
+    elif args.dataset == "phiusiil":
+        df = pd.read_csv("../data/PhiUSIIL/phiusiil-filtered.csv", index_col=False)
+        prompts = (
+            df["prompt"].values
+            if args.strategy == "tokenized-prompt"
+            else remove_www_prefix(df["Domain"].values)
+        )
+        labels = df["label"].values
+
+        if args.sample:
+            N_SAMPLES = min(36000, len(prompts))
+            _, prompts, _, labels = train_test_split(
+                prompts, labels, test_size=N_SAMPLES, random_state=0, stratify=labels
+            )
+
+        X_train, X_val, X_test, y_train, y_val, y_test = split_70_15_15(prompts, labels)
+
     elif "10ksubset" in args.dataset:
         df = pd.read_csv(f"../data/{args.dataset}.csv", index_col=False)
+
+        if "phiusiil" in args.dataset:
+            labels = df["label"].values
+        else:
+            labels = df["malicious"].values
+
         if args.strategy == "tokenized-prompt":
             names = df["prompt"].values
         else:
             if "phiusiil" in args.dataset:
                 names = df["Domain"].values
-                labels = df["label"].values
-
             else:
                 names = df["name"].values
-                labels = df["malicious"].values
 
         names = remove_www_prefix(names)
+        X_train, X_val, X_test, y_train, y_val, y_test = split_70_15_15(names, labels)
 
-        X_train, X_temp, y_train, y_temp = train_test_split(
-            names, labels, test_size=0.30, random_state=0, stratify=labels
-        )
+    elif args.dataset == "lim":
+        col_to_get = "prompt" if args.strategy == "tokenized-prompt" else "0"
+        df = pd.read_csv("../data/less-is-more/BTCP.csv", index_col=False)
+        prompts = df[col_to_get].values
+        labels = df["label"].values
+        X_train, X_val, X_test, y_train, y_val, y_test = split_70_15_15(prompts, labels)
 
-    elif args.dataset == "csic":
-        prompts, labels = load_csic()
+    elif args.dataset == "domain":
+        df = pd.read_csv("../dns-feature-enrichment/csvs/dataset.csv")
+        labels = df["malicious"].values
+        prompts = df["name"].values
+        df = None
+        X_train, X_val, X_test, y_train, y_val, y_test = split_70_15_15(prompts, labels)
 
-        X_train, X_temp, y_train, y_temp = train_test_split(
-            prompts, labels, test_size=0.30, random_state=0, stratify=labels
-        )
-        X_val, X_test, y_val, y_test = train_test_split(
-            X_temp, y_temp, test_size=0.50, random_state=0, stratify=y_temp
-        )
-
-    elif args.dataset == "fwaf":
-        prompts, labels = load_fwaf()
-
-        X_train, X_temp, y_train, y_temp = train_test_split(
-            prompts, labels, test_size=0.30, random_state=0, stratify=labels
-        )
-        X_val, X_test, y_val, y_test = train_test_split(
-            X_temp, y_temp, test_size=0.50, random_state=0, stratify=y_temp
-        )
-
-    elif args.dataset == "httpparams":
-        prompts, labels = load_httpparams()
-
-        X_train, X_temp, y_train, y_temp = train_test_split(
-            prompts, labels, test_size=0.30, random_state=0, stratify=labels
-        )
-        X_val, X_test, y_val, y_test = train_test_split(
-            X_temp, y_temp, test_size=0.50, random_state=0, stratify=y_temp
-        )
+    elif args.dataset in ("csic", "fwaf", "httpparams"):
+        loaders = {"csic": load_csic, "fwaf": load_fwaf, "httpparams": load_httpparams}
+        prompts, labels = loaders[args.dataset]()
+        X_train, X_val, X_test, y_train, y_val, y_test = split_70_15_15(prompts, labels)
 
     print("\n--- Tamanho dos Conjuntos ---")
     print(f"Treino:    {len(X_train)} amostras")
