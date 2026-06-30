@@ -1,11 +1,13 @@
 import argparse
 import os
+import urllib
 
 import evaluate
 import numpy as np
 import pandas as pd
 import torch
 from datasets import Dataset, DatasetDict
+from dotenv import load_dotenv
 from huggingface_hub import login
 from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
 from scipy.special import softmax
@@ -20,14 +22,10 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
-from dotenv import load_dotenv
 
 load_dotenv()
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 login(token=os.getenv("HF_TOKEN"))
-
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-login(token="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")
 
 
 def get_args():
@@ -95,6 +93,79 @@ SYSTEM_INSTRUCTION = (
 accuracy = evaluate.load("accuracy")
 auc_score = evaluate.load("roc_auc")
 f1 = evaluate.load("f1")
+
+
+def load_csic() -> tuple[list, list]:
+    def loadData(file):
+        with open(file, "r", encoding="utf8") as f:
+            data = f.readlines()
+        result = []
+        for d in data:
+            d = d.strip()
+            if len(d) > 0:
+                result.append(d)
+        return result
+
+    bad_requests = loadData("../data/http/PreProcessedAnomalous.txt")
+    good_requests = loadData("../data/http/PreprocessedNormalTraining.txt")
+    all_requests = bad_requests + good_requests
+
+    labels_Bad = [1] * len(bad_requests)
+    labels_Good = [0] * len(good_requests)
+    labels = labels_Bad + labels_Good
+
+    return all_requests, labels
+
+
+def load_fwaf() -> tuple[list, list]:
+    def loadFile(name):
+        num_samples = 0
+        directory = str(os.getcwd())
+        filepath = os.path.join(directory, name)
+        with open(filepath, "r") as f:
+            data = f.readlines()
+        data = list(set(data))
+        result = []
+        for d in data:
+            d = str(
+                urllib.parse.unquote(d)
+            )  # converting url encoded data to simple string
+            result.append(d)
+            num_samples += 1
+            if num_samples >= 120000:
+                return result
+        return result
+
+    badQueries = loadFile("../data/http/badqueries.txt")
+    validQueries = loadFile("../data/http/goodqueries.txt")
+
+    badQueries = list(set(badQueries))
+    validQueries = list(set(validQueries))
+    allQueries = badQueries + validQueries
+    yBad = [
+        1 for i in range(0, len(badQueries))
+    ]  # labels, 1 for malicious and 0 for clean
+    yGood = [0 for i in range(0, len(validQueries))]
+    y = yBad + yGood
+    queries = allQueries
+
+    return queries, y
+
+
+def load_httpparams() -> tuple[list, list]:
+    df = pd.read_csv("../data/http/payload_full.csv")
+    print(df.head())
+    df.dropna(inplace=True)
+    df.loc[df["label"] == "norm", "label"] = 0
+    df.loc[df["label"] == "anom", "label"] = 1
+    df["label"] = df["label"].astype(int)
+    print(str(len(df)) + " Amostras")
+    print(df.columns)
+    print(df["attack_type"].unique())
+    payload = df["payload"].values
+    labels = df["label"].values
+
+    return payload, labels
 
 
 def remove_www_prefix(domains):
@@ -180,30 +251,26 @@ def main(args):
         )
 
     elif args.dataset == "phiusiil":
-        if args.strategy == "tokenized-prompt":
-            df = pd.read_csv("../data/PhiUSIIL/phiusiil-filtered.csv", index_col=False)
-            names = df["prompt"].values
-
-        else:
-            df = pd.read_csv("../data/PhiUSIIL/phiusiil-filtered.csv", index_col=False)
-            names = df["Domain"].values
+        df = pd.read_csv("../data/PhiUSIIL/phiusiil-filtered.csv", index_col=False)
+        prompts = (
+            df["prompt"].values
+            if args.strategy == "tokenized-prompt"
+            else remove_www_prefix(df["Domain"].values)
+        )
         labels = df["label"].values
 
-        if args.sample:    
-            N_SAMPLES = 36000
-
-        if N_SAMPLES and N_SAMPLES < len(names):
-            print(
-                f"Modo de Teste: Extraindo uma amostra estratificada de {N_SAMPLES} domínios..."
-            )
-            _, names, _, labels = train_test_split(
-                names, labels, test_size=N_SAMPLES, random_state=0, stratify=labels
+        if args.sample:
+            N_SAMPLES = min(36000, len(prompts))
+            _, prompts, _, labels = train_test_split(
+                prompts, labels, test_size=N_SAMPLES, random_state=0, stratify=labels
             )
 
         if args.strategy != "tokenized-prompt":
-            names = remove_www_prefix(names)
-        
+            prompts = remove_www_prefix(prompts)
 
+        X_train, X_temp, y_train, y_temp = train_test_split(
+            prompts, labels, test_size=0.30, random_state=0, stratify=labels
+        )
         X_val, X_test, y_val, y_test = train_test_split(
             X_temp, y_temp, test_size=0.50, random_state=0, stratify=y_temp
         )
@@ -266,6 +333,32 @@ def main(args):
             names, labels, test_size=0.30, random_state=0, stratify=labels
         )
 
+    elif args.dataset == "csic":
+        prompts, labels = load_csic()
+
+        X_train, X_temp, y_train, y_temp = train_test_split(
+            prompts, labels, test_size=0.30, random_state=0, stratify=labels
+        )
+        X_val, X_test, y_val, y_test = train_test_split(
+            X_temp, y_temp, test_size=0.50, random_state=0, stratify=y_temp
+        )
+
+    elif args.dataset == "fwaf":
+        prompts, labels = load_fwaf()
+
+        X_train, X_temp, y_train, y_temp = train_test_split(
+            prompts, labels, test_size=0.30, random_state=0, stratify=labels
+        )
+        X_val, X_test, y_val, y_test = train_test_split(
+            X_temp, y_temp, test_size=0.50, random_state=0, stratify=y_temp
+        )
+
+    elif args.dataset == "httpparams":
+        prompts, labels = load_httpparams()
+
+        X_train, X_temp, y_train, y_temp = train_test_split(
+            prompts, labels, test_size=0.30, random_state=0, stratify=labels
+        )
         X_val, X_test, y_val, y_test = train_test_split(
             X_temp, y_temp, test_size=0.50, random_state=0, stratify=y_temp
         )
@@ -432,7 +525,6 @@ def main(args):
             lora_dropout=0.00,
         )
         model = get_peft_model(model, lora_config)
-
 
     lr = 2e-05
     batch_size = args.batch
