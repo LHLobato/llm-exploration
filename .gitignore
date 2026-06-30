@@ -14,3 +14,4 @@
 *.env
 *.npz
 scripts/~/
+training/features/
