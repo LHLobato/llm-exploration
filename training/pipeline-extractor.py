@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from sklearn.model_selection import train_test_split
-from ensemble import BertFeatureExtractor, registry
+from extractor import BertFeatureExtractor, registry
 
 BERT_MODELS = ["BERT-Base", "distilBERT", "DEBERTa", "ModernBERT"]
 
@@ -104,9 +104,15 @@ def main(args):
     )
     print(f"Features — train: {X_train.shape} | val: {X_val.shape} | test: {X_test.shape}")
 
-    X_fit = X_val
-    y_fit = y_train, y_val
+    X_train = X_train.astype(np.float32)
+    X_val   = X_val.astype(np.float32)
+    X_test  = X_test.astype(np.float32)
+    y_train = y_train.astype(np.int64)
+    y_val   = y_val.astype(np.int64)
+    y_test  = y_test.astype(np.int64)
 
+    X_fit = X_val 
+    y_fit = y_val
     for clf_name, clf_factory in registry.items():
         if _already_evaluated(args.results_csv, args.model_name, args.dataset, clf_name):
             print(f"[SKIP] {clf_name} já avaliado.")

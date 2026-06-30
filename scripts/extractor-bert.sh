@@ -1,5 +1,5 @@
 #!/bin/bash
-VENV_DIR="~/ic_venv"
+VENV_DIR="/home/lhslobato/ic_venv"
 REQUIREMENTS="requirements.txt"
 if [ "$VIRTUAL_ENV" != "$(pwd)/$VENV_DIR" ]; then
     echo "O ambiente '$VENV_DIR' não está ativado no momento."
@@ -53,7 +53,7 @@ for DATASET in "${!DATASET_CSV[@]}"; do
     echo "---------------------------------------------------------"
     for MODEL in "${!BERT_MODEL_PATHS[@]}"; do
         echo " -> Modelo: $MODEL | Dataset: $DATASET"
-        python ../training/bert_ensemble_experiment.py \
+        python ../training/pipeline-extractor.py \
             --results_csv  "$RESULTS_CSV" \
             --model_name   "$MODEL" \
             --model_path   "${BERT_MODEL_PATHS[$MODEL]}" \
@@ -62,7 +62,7 @@ for DATASET in "${!DATASET_CSV[@]}"; do
             --text_col     "${DATASET_TEXT_COL[$DATASET]}" \
             --label_col    "${DATASET_LABEL_COL[$DATASET]}" \
             --features_dir "$FEATURES_DIR" \
-            --batch_size   64 \
+            --batch_size   32 \
             --num_workers  8 \
             --max_length   200
         echo " -> [OK] $MODEL | $DATASET finalizado!"

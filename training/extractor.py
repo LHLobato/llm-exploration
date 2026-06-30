@@ -21,14 +21,14 @@ BASE = {
         n_estimators=300,
         max_features="sqrt",       
         min_samples_leaf=2,
-        n_jobs=-1,
+        n_jobs=2,
         random_state=42,
     ),
     "KNN": lambda: KNeighborsClassifier(
         n_neighbors=11,
         metric="cosine",           
         algorithm="brute",         
-        n_jobs=-1,
+        n_jobs=2,
     ),
     "XGB": lambda: XGBClassifier(
         n_estimators=400,
@@ -39,7 +39,7 @@ BASE = {
         use_label_encoder=False,
         eval_metric="logloss",
         random_state=42,
-        n_jobs=-1,
+        n_jobs=2,
     ),
     "LinearSVC": lambda: LinearSVC(
         C=0.1,                    
@@ -53,7 +53,7 @@ _voting_entries = {
         lambda names=names: VotingClassifier(
             estimators=[(n, clf()) for n, clf in BASE.items() if n in names],
             voting="hard",
-            n_jobs=-1,
+            n_jobs=2,
         )
     )
     for r in range(2, len(BASE) + 1)
@@ -66,7 +66,8 @@ _stacking_entries = {
             estimators=[(n, clf()) for n, clf in BASE.items() if n in names],
             final_estimator=LinearSVC(C=0.1, max_iter=2000, random_state=42),
             passthrough=False,
-            n_jobs=-1,
+            cv=2, 
+            n_jobs=1,
         )
     )
     for r in range(2, len(BASE) + 1)

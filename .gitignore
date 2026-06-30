@@ -12,3 +12,5 @@
 *.model
 *.bin
 *.env
+*.npz
+scripts/~/
