@@ -18,3 +18,9 @@ google/gemma-3-1b-it-phiusiil-None,tokenized-prompt,0.9998,1.0,0.9998
 Qwen/Qwen2.5-1.5B-Instruct-phiusiil-None,tokenized-prompt,0.9994,1.0,0.9994
 distilbert/distilbert-base-uncased-domain-enriched-None,only-names,0.8296,0.9102,0.8286
 google-bert/bert-base-uncased-domain-enriched-None,only-names,0.8319,0.9111,0.8309
+distilbert/distilbert-base-uncased-csic-None,,0.9938,0.9984,0.9936
+google-bert/bert-base-uncased-csic-None,,0.9939,0.9984,0.9937
+answerdotai/ModernBERT-Base-csic-None,,0.997,0.9994,0.9969
+microsoft/deberta-v3-base-csic-None,,0.9955,0.9992,0.9953
+answerdotai/ModernBERT-Base-fwaf-None,,0.9991,0.9999,0.9989
+microsoft/deberta-v3-base-fwaf-None,,0.9989,1.0,0.9986
