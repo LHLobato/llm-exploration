@@ -43,10 +43,17 @@ def get_args():
             "Qwen",
             "Gemma",
             "ModernBERT",
+            "DeepSeek",
         ],
     )
     parser.add_argument(
         "--modelpath", type=str, help="Caminho para o modelo no HuggingFace ou local"
+    )
+    parser.add_argument(
+        "--num_shots",
+        type=int,
+        default=2,
+        help="Número de exemplos por classe no few-shot (total = 2*num_shots)",
     )
     parser.add_argument(
         "--dataset",
@@ -60,8 +67,8 @@ def get_args():
             "httpparams",
             "lim",
             "phiusiil",
-            "10ksubset-phiusiil",
-            "10ksubset-custom",
+            "15kphiusiil_subset",
+            "30kcustom_subset",
         ],
     )
     parser.add_argument(
@@ -81,14 +88,20 @@ def get_args():
     return parser.parse_args()
 
 
-CHAT_TEMPLATE_MODELS = ["Llama-3", "Qwen", "Gemma", "TinyLlama"]
+CHAT_TEMPLATE_MODELS = ["Llama-3", "Qwen", "Gemma", "TinyLlama", "DeepSeek"]
 
 
-LLM_MODELS = ["Llama-3", "TinyLlama", "Qwen", "Gemma"]
+LLM_MODELS = ["Llama-3", "TinyLlama", "Qwen", "Gemma", "DeepSeek"]
 SYSTEM_INSTRUCTION = (
     "You are a cybersecurity classifier. "
     "Analyze the domain record below and classify it as benign or malicious. Use 0 for benign and 1 for malicious"
 )
+
+# Prefill inserido no início do turno do assistant em zero/few-shot: força o
+# próximo token gerado a ser o rótulo em si, em vez de deixar o modelo abrir
+# a resposta livremente (ex.: "I think...", "Based on...", que é o que ele
+# faz por padrão -- confirmado via diagnóstico nos 3 LLMs).
+LABEL_PREFILL = "Answer: "
 
 accuracy = evaluate.load("accuracy")
 auc_score = evaluate.load("roc_auc")
@@ -108,6 +121,47 @@ def split_70_15_15(
         X_temp, y_temp, test_size=0.50, random_state=random_state, stratify=y_temp
     )
     return X_train, X_val, X_test, y_train, y_val, y_test
+
+
+def dedupe_arrays(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Remove domínios duplicados (ex.: 'https://x.com' e 'www.x.com' que
+    colapsam pra mesma string após remove_www_prefix). Necessário antes de
+    formar os pools de zero/few-shot para não deixar o mesmo domínio cair
+    em exemplo de demonstração E em avaliação ao mesmo tempo."""
+    _, idx = np.unique(X, return_index=True)
+    idx = np.sort(idx)
+    return X[idx], y[idx]
+
+
+def split_example_eval(
+    X: np.ndarray, y: np.ndarray, example_frac: float = 0.10, random_state: int = 0
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Reserva example_frac (estratificado) como pool de exemplos para
+    few-shot; o restante (X_eval) é usado tanto no zero-shot quanto em
+    qualquer num_shots -- garante que o conjunto avaliado é sempre o mesmo,
+    independente da config de shots, e que nenhum exemplo de demo pode
+    aparecer como pergunta de teste (pools nascem disjuntos)."""
+    X_example, X_eval, y_example, y_eval = train_test_split(
+        X, y, test_size=1 - example_frac, random_state=random_state, stratify=y
+    )
+    return X_example, y_example, X_eval, y_eval
+
+
+def build_few_shot_pool(X_pool, y_pool, k, seed=0):
+    """Amostra k exemplos por classe do pool de exemplos (nunca do X_eval)
+    para servir de demonstração -- balanceado pra não enviesar o modelo
+    pra uma classe."""
+    rng = np.random.RandomState(seed)
+    pos_idx = np.where(y_pool == 1)[0]
+    neg_idx = np.where(y_pool == 0)[0]
+    chosen = np.concatenate(
+        [
+            rng.choice(pos_idx, size=k, replace=False),
+            rng.choice(neg_idx, size=k, replace=False),
+        ]
+    )
+    rng.shuffle(chosen)
+    return [(X_pool[i], int(y_pool[i])) for i in chosen]
 
 
 def load_csic() -> tuple[list, list]:
@@ -195,13 +249,34 @@ def remove_www_prefix(domains):
     return np.array(processed_domains)
 
 
-def predict_zero_few_shot(model, tokenizer, texts, batch_size=32):
+def get_label_token_ids(tokenizer, prefix_text: str) -> tuple[int, int]:
+    """
+    Deriva os IDs de token para '0' e '1' *no mesmo contexto textual* em que
+    serão de fato gerados (após o prefill), em vez de tokenizar '0'/'1'
+    isolados. BPE pode tokenizar um dígito de forma diferente dependendo do
+    texto imediatamente anterior -- tokenizar isolado dá o ID errado.
+    """
+    base_len = len(tokenizer(prefix_text, add_special_tokens=False).input_ids)
+    id0 = tokenizer(prefix_text + "0", add_special_tokens=False).input_ids[base_len]
+    id1 = tokenizer(prefix_text + "1", add_special_tokens=False).input_ids[base_len]
+    return id0, id1
 
-    token_0 = tokenizer("0", add_special_tokens=False).input_ids[-1]
-    token_1 = tokenizer("1", add_special_tokens=False).input_ids[-1]
+
+def predict_zero_few_shot(model, tokenizer, texts, batch_size=32, max_length=200):
+    # Deriva os IDs de '0'/'1' no mesmo contexto em que serão gerados
+    # (todos os prompts compartilham o mesmo sufixo LABEL_PREFILL, então
+    # basta derivar uma vez a partir do primeiro exemplo).
+    token_0, token_1 = get_label_token_ids(tokenizer, texts[0])
 
     all_logits = []
+    print("truncation_side:", tokenizer.truncation_side)
+    print("token_0 id:", token_0, "->", tokenizer.convert_ids_to_tokens([token_0]))
+    print("token_1 id:", token_1, "->", tokenizer.convert_ids_to_tokens([token_1]))
+    sample_ids = tokenizer(texts[0], add_special_tokens=False).input_ids
+    print(f"tamanho do 1º prompt tokenizado: {len(sample_ids)} (max_length={max_length})")
+    print("últimos 10 tokens do prompt:", tokenizer.convert_ids_to_tokens(sample_ids[-10:]))
 
+    # e, pra 5 amostras reais, compara logit restrito vs rótulo verdadeiro:
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
 
@@ -210,13 +285,24 @@ def predict_zero_few_shot(model, tokenizer, texts, batch_size=32):
             return_tensors="pt",
             truncation=True,
             padding=True,
-            max_length=200,
+            max_length=max_length,
         ).to(model.device)
 
         with torch.no_grad():
             outputs = model(**inputs)
 
-        last_token_logits = outputs.logits[:, -1, :]
+        # Índice do último token real de cada sequência do batch.
+        # Funciona tanto com left padding (Llama/Qwen/TinyLlama) quanto
+        # right padding (Gemma): outputs.logits[:, -1, :] só é correto
+        # com left padding -- com right padding pega o logit de um token
+        # de padding para qualquer sequência mais curta que a maior do batch.
+        attn = inputs["attention_mask"]
+        seq_len = attn.size(1)
+        last_real_idx = seq_len - 1 - attn.flip(dims=[1]).argmax(dim=1)
+
+        last_token_logits = outputs.logits[
+            torch.arange(outputs.logits.size(0)), last_real_idx, :
+        ]
 
         restricted = last_token_logits[:, [token_0, token_1]]
 
@@ -293,7 +379,7 @@ def main(args):
 
         X_train, X_val, X_test, y_train, y_val, y_test = split_70_15_15(prompts, labels)
 
-    elif "10ksubset" in args.dataset:
+    elif "subset" in args.dataset:
         df = pd.read_csv(f"../data/{args.dataset}.csv", index_col=False)
 
         if "phiusiil" in args.dataset:
@@ -337,6 +423,27 @@ def main(args):
     print(f"Teste:     {len(X_test)} amostras")
     print("---------------------------\n")
 
+    if args.train_mode in ("zero", "few"):
+        # Não há treino de fato em zero/few-shot (sem gradiente), então
+        # reaproveita train+val+test inteiros como massa de avaliação em vez
+        # de restringir a X_test. Reserva 10% (estratificado) como pool de
+        # exemplos para few-shot -- X_eval (90%) é o MESMO conjunto usado no
+        # zero-shot e em qualquer num_shots, garantindo comparação justa
+        # entre configs. Os pools nascem disjuntos, então nenhum exemplo de
+        # demonstração pode vazar pro conjunto avaliado.
+        X_all = np.concatenate([X_train, X_val, X_test])
+        y_all = np.concatenate([y_train, y_val, y_test])
+        X_all, y_all = dedupe_arrays(X_all, y_all)
+
+        X_example_pool, y_example_pool, X_eval, y_eval = split_example_eval(
+            X_all, y_all, example_frac=0.10, random_state=0
+        )
+
+        print("\n--- Pools Zero/Few-Shot (após dedupe) ---")
+        print(f"Pool de exemplos (10%): {len(X_example_pool)} amostras")
+        print(f"Conjunto de avaliação (90%): {len(X_eval)} amostras")
+        print("------------------------------------------\n")
+
     train_dataset = Dataset.from_dict({"prompt": X_train, "label": y_train})
     val_dataset = Dataset.from_dict({"prompt": X_val, "label": y_val})
     test_dataset = Dataset.from_dict({"prompt": X_test, "label": y_test})
@@ -353,8 +460,10 @@ def main(args):
 
     def format_chat_prompt(prompt_text: str) -> str:
         """
-        Envolve o prompt enriquecido na estrutura role/content do chat template
-        nativo do modelo (ex: Gemma, Llama, Qwen).
+        Usado no fine-tuning (train_mode == 'tuning'): monta o prompt no chat
+        template nativo do modelo (Gemma, Llama, Qwen...), sem prefill de
+        resposta -- quem prevê o rótulo é o classifier head (SEQ_CLS), não a
+        geração de texto, então não faz sentido forçar continuação aqui.
 
         Resultado para o Gemma 2B Instruct:
             <start_of_turn>user
@@ -374,6 +483,41 @@ def main(args):
         return tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
+
+    def format_zero_shot(prompt_text: str) -> str:
+        """
+        Zero-shot: chat template padrão + LABEL_PREFILL anexado ao final.
+        Isso restringe o próximo token gerado a ser o rótulo em si -- sem o
+        prefill, o modelo abre a resposta livremente (ex.: "I think...",
+        "Based on...", "After..."), o que faz predict_zero_few_shot ler
+        logits de tokens de abertura de frase em vez de logits de
+        classificação (confirmado via diagnóstico).
+        """
+        formatted = format_chat_prompt(prompt_text)
+        return formatted + LABEL_PREFILL
+
+    def format_few_shot(prompt_text: str, examples: list[tuple[str, int]]) -> str:
+        """
+        Few-shot: injeta os exemplos de demonstração como turnos
+        user/assistant reais (não dentro do system_instruction) -- cada
+        modelo formata isso no chat template nativo dele, e o modelo vê o
+        padrão LABEL_PREFILL+rótulo em cada turno, igual ao que vai ter que
+        gerar no turno real. examples vem sempre do pool de exemplos
+        (nunca do X_eval).
+        """
+        messages = []
+        for i, (ex_text, ex_label) in enumerate(examples):
+            content = f"{SYSTEM_INSTRUCTION}\n\n{ex_text}" if i == 0 else ex_text
+            messages.append({"role": "user", "content": content})
+            messages.append(
+                {"role": "assistant", "content": f"{LABEL_PREFILL}{ex_label}"}
+            )
+
+        messages.append({"role": "user", "content": prompt_text})
+        formatted = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        return formatted + LABEL_PREFILL
 
     def preprocess_function(examples):
         if args.model in CHAT_TEMPLATE_MODELS:
@@ -404,7 +548,7 @@ def main(args):
     label2id = {"Benign": 0, "Malicious": 1}
 
     bnb_config = None
-    if args.model in ["Qwen", "Gemma", "Llama-3", "TinyLlama"]:
+    if args.model in ["Qwen", "Gemma", "Llama-3", "TinyLlama", "DeepSeek"]:
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
@@ -502,16 +646,42 @@ def main(args):
     best = outputdir + "best/"
 
     if args.train_mode in ("zero", "few"):
-        # Formata os prompts (já usa seu format_chat_prompt existente)
+
+        few_shot_examples = None
+        if args.train_mode == "few":
+            few_shot_examples = build_few_shot_pool(
+                X_example_pool, y_example_pool, k=args.num_shots
+            )
+
         if args.model in CHAT_TEMPLATE_MODELS:
-            test_texts = [format_chat_prompt(p) for p in X_test]
+            if args.train_mode == "zero":
+                test_texts = [format_zero_shot(p) for p in X_eval]
+            else:
+                test_texts = [format_few_shot(p, few_shot_examples) for p in X_eval]
         else:
-            test_texts = [f"{SYSTEM_INSTRUCTION}\n\n{p}" for p in X_test]
+            test_texts = [f"{SYSTEM_INSTRUCTION}\n\n{p}{LABEL_PREFILL}" for p in X_eval]
+
+        # max_length calculado dinamicamente com base no maior prompt real
+        # (few-shot com vários exemplos de demonstração pode passar longe
+        # dos 200 tokens fixos usados antes -- truncar cortava justamente o
+        # domínio real + o LABEL_PREFILL no final do prompt).
+        max_len_needed = (
+            max(
+                len(tokenizer(t, add_special_tokens=False).input_ids)
+                for t in test_texts
+            )
+            + 10
+        )
+        print(f"Max_len needed: {max_len_needed}")
 
         logits = predict_zero_few_shot(
-            model, tokenizer, test_texts, batch_size=batch_size
+            model,
+            tokenizer,
+            test_texts,
+            batch_size=batch_size,
+            max_length=max_len_needed,
         )
-        labels = y_test
+        labels = y_eval
 
         metrics = compute_metrics((logits, labels))
 
@@ -658,6 +828,8 @@ def main(args):
             "accuracy": [metrics["Accuracy"]],
             "auc": [metrics["AUC"]],
             "f1-score": [metrics["F1-Score"]],
+            "mode":[args.train_mode], 
+            "shots":[args.num_shots]
         }
     ).to_csv(path, index=False, header=not exists, mode="a")
 
