@@ -16,3 +16,4 @@
 scripts/~/
 training/features/
 !data/15kphiusiil_subset.csv
+!*.tar.gz
