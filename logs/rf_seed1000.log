@@ -1,0 +1,38 @@
+17:12:20 [INFO] Carregando dados já divididos em train/val/test...
+17:12:34 [INFO] Tamanhos -> train: 325975, val: 69852, test: 69852
+17:12:34 [INFO] Extraindo atributos numéricos (colunas de texto descartadas)...
+17:12:23 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:12:23 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:12:23 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:12:23 [INFO] Número de features: 30
+17:12:23 [INFO] Sem normalização para RF (modelo baseado em árvores).
+17:12:23 [INFO] Treinando o modelo: RF com todos os atributos numéricos...
+17:13:10 [INFO] [val] acc=0.9103 precision=0.9105 recall=0.9102 f1=0.9103 auc=0.9671
+17:13:10 [INFO] [test] acc=0.9089 precision=0.9090 recall=0.9087 f1=0.9088 auc=0.9672
+17:13:11 [INFO] Modelo salvo em ./joblib/rf_seed1000-rf.joblib
+17:19:02 [INFO] Carregando dados já divididos em train/val/test...
+17:19:05 [INFO] Tamanhos -> train: 325975, val: 69852, test: 69852
+17:19:05 [INFO] Extraindo atributos numéricos (colunas de texto descartadas)...
+17:19:05 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:19:05 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:19:05 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:19:05 [INFO] Número de features: 30
+17:19:05 [INFO] Sem normalização para RF (modelo baseado em árvores).
+17:19:05 [INFO] Treinando o modelo: RF com todos os atributos numéricos...
+17:19:59 [INFO] [val] acc=0.9103 precision=0.9105 recall=0.9102 f1=0.9103 auc=0.9671
+17:20:00 [INFO] [test] acc=0.9089 precision=0.9090 recall=0.9087 f1=0.9088 auc=0.9672
+17:20:00 [INFO] Métricas salvas em: ../logs/experiments_results.csv
+17:20:01 [INFO] Modelo salvo em ./joblib/rf_seed1000-rf.joblib
+17:38:34 [INFO] Carregando dados já divididos em train/val/test...
+17:38:26 [INFO] Tamanhos -> train: 325975, val: 69852, test: 69852
+17:38:26 [INFO] Extraindo atributos numéricos (colunas de texto descartadas)...
+17:38:26 [INFO] Features usadas: ['lex_length', 'lex_digit_count', 'lex_digit_ratio', 'lex_vowel_ratio', 'lex_consonant_ratio', 'lex_special_char_ratio', 'lex_entropy', 'lex_hyphen_count', 'lex_starts_with_digit', 'lex_has_repeated_chars', 'lex_max_consonant_seq', 'lex_max_digit_seq', 'lex_unique_char_ratio', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:38:26 [INFO] Features usadas: ['lex_length', 'lex_digit_count', 'lex_digit_ratio', 'lex_vowel_ratio', 'lex_consonant_ratio', 'lex_special_char_ratio', 'lex_entropy', 'lex_hyphen_count', 'lex_starts_with_digit', 'lex_has_repeated_chars', 'lex_max_consonant_seq', 'lex_max_digit_seq', 'lex_unique_char_ratio', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:38:26 [INFO] Features usadas: ['lex_length', 'lex_digit_count', 'lex_digit_ratio', 'lex_vowel_ratio', 'lex_consonant_ratio', 'lex_special_char_ratio', 'lex_entropy', 'lex_hyphen_count', 'lex_starts_with_digit', 'lex_has_repeated_chars', 'lex_max_consonant_seq', 'lex_max_digit_seq', 'lex_unique_char_ratio', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:38:26 [INFO] Número de features: 42
+17:38:26 [INFO] Sem normalização para RF (modelo baseado em árvores).
+17:38:26 [INFO] Treinando o modelo: RF com todos os atributos numéricos...
+17:39:27 [INFO] [val] acc=0.9097 precision=0.9099 recall=0.9096 f1=0.9097 auc=0.9675
+17:39:39 [INFO] [test] acc=0.9091 precision=0.9094 recall=0.9090 f1=0.9091 auc=0.9676
+17:39:39 [INFO] Métricas salvas em: ../logs/experiments_results.csv
+17:39:29 [INFO] Modelo salvo em ./joblib/rf_seed1000-rf.joblib

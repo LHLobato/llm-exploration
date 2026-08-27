@@ -34,6 +34,7 @@ python test.py \
     --test_img_path "$TEST_PATH" \
     --llm_path "$LLM_PATH" \
     --cnn_path "$CNN_PATH" \
+    --tab_path "$MLP_PATH" \ 
     --tab_path "$MLP_PATH"
 
 if [ $? -eq 0 ]; then

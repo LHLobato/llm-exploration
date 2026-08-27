@@ -1,0 +1,101 @@
+17:00:47 [INFO] Carregando dados já divididos em train/val/test...
+17:00:50 [INFO] Tamanhos -> train: 325975, val: 69852, test: 69852
+17:00:50 [INFO] Extraindo atributos numéricos (colunas de texto descartadas)...
+17:00:51 [INFO] Sem normalização para XGB (modelo baseado em árvores).
+17:00:51 [INFO] Treinando o modelo: XGB com todos os atributos numéricos...
+17:01:07 [INFO] [val] acc=0.9119 precision=0.9121 recall=0.9118 f1=0.9119 auc=0.9689
+17:01:07 [INFO] [test] acc=0.9109 precision=0.9111 recall=0.9108 f1=0.9108 auc=0.9685
+17:01:07 [INFO] Modelo salvo em ./joblib/xgb_seed0-xgb.joblib
+17:03:09 [INFO] Carregando dados já divididos em train/val/test...
+17:03:00 [INFO] Tamanhos -> train: 325975, val: 69852, test: 69852
+17:03:00 [INFO] Extraindo atributos numéricos (colunas de texto descartadas)...
+17:03:01 [INFO] Sem normalização para XGB (modelo baseado em árvores).
+17:03:01 [INFO] Treinando o modelo: XGB com todos os atributos numéricos...
+17:03:21 [INFO] [val] acc=0.9119 precision=0.9121 recall=0.9118 f1=0.9119 auc=0.9689
+17:03:22 [INFO] [test] acc=0.9109 precision=0.9111 recall=0.9108 f1=0.9108 auc=0.9685
+17:03:22 [INFO] Modelo salvo em ./joblib/xgb_seed0-xgb.joblib
+17:03:55 [INFO] Carregando dados já divididos em train/val/test...
+17:03:57 [INFO] Tamanhos -> train: 325975, val: 69852, test: 69852
+17:03:57 [INFO] Extraindo atributos numéricos (colunas de texto descartadas)...
+17:03:57 [INFO] Número de features: 42
+17:03:57 [INFO] Sem normalização para XGB (modelo baseado em árvores).
+17:03:57 [INFO] Treinando o modelo: XGB com todos os atributos numéricos...
+17:04:20 [INFO] [val] acc=0.9119 precision=0.9121 recall=0.9118 f1=0.9119 auc=0.9689
+17:04:21 [INFO] [test] acc=0.9109 precision=0.9111 recall=0.9108 f1=0.9108 auc=0.9685
+17:04:21 [INFO] Modelo salvo em ./joblib/xgb_seed0-xgb.joblib
+17:04:39 [INFO] Carregando dados já divididos em train/val/test...
+17:04:41 [INFO] Tamanhos -> train: 325975, val: 69852, test: 69852
+17:04:41 [INFO] Extraindo atributos numéricos (colunas de texto descartadas)...
+17:04:41 [INFO] Features usadas: ['lex_length', 'lex_digit_count', 'lex_digit_ratio', 'lex_vowel_ratio', 'lex_consonant_ratio', 'lex_special_char_ratio', 'lex_entropy', 'lex_hyphen_count', 'lex_starts_with_digit', 'lex_has_repeated_chars', 'lex_max_consonant_seq', 'lex_max_digit_seq', 'lex_unique_char_ratio', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:04:41 [INFO] Features usadas: ['lex_length', 'lex_digit_count', 'lex_digit_ratio', 'lex_vowel_ratio', 'lex_consonant_ratio', 'lex_special_char_ratio', 'lex_entropy', 'lex_hyphen_count', 'lex_starts_with_digit', 'lex_has_repeated_chars', 'lex_max_consonant_seq', 'lex_max_digit_seq', 'lex_unique_char_ratio', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:04:41 [INFO] Features usadas: ['lex_length', 'lex_digit_count', 'lex_digit_ratio', 'lex_vowel_ratio', 'lex_consonant_ratio', 'lex_special_char_ratio', 'lex_entropy', 'lex_hyphen_count', 'lex_starts_with_digit', 'lex_has_repeated_chars', 'lex_max_consonant_seq', 'lex_max_digit_seq', 'lex_unique_char_ratio', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:04:41 [INFO] Número de features: 42
+17:04:41 [INFO] Sem normalização para XGB (modelo baseado em árvores).
+17:04:41 [INFO] Treinando o modelo: XGB com todos os atributos numéricos...
+17:05:04 [INFO] [val] acc=0.9119 precision=0.9121 recall=0.9118 f1=0.9119 auc=0.9689
+17:04:53 [INFO] [test] acc=0.9109 precision=0.9111 recall=0.9108 f1=0.9108 auc=0.9685
+17:04:53 [INFO] Modelo salvo em ./joblib/xgb_seed0-xgb.joblib
+17:08:44 [INFO] Carregando dados já divididos em train/val/test...
+17:08:47 [INFO] Tamanhos -> train: 325975, val: 69852, test: 69852
+17:08:47 [INFO] Extraindo atributos numéricos (colunas de texto descartadas)...
+17:08:47 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:08:47 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:08:47 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:08:47 [INFO] Número de features: 30
+17:08:47 [INFO] Sem normalização para XGB (modelo baseado em árvores).
+17:08:47 [INFO] Treinando o modelo: XGB com todos os atributos numéricos...
+17:09:09 [INFO] [val] acc=0.9105 precision=0.9106 recall=0.9104 f1=0.9105 auc=0.9672
+17:09:10 [INFO] [test] acc=0.9097 precision=0.9099 recall=0.9096 f1=0.9097 auc=0.9672
+17:09:10 [INFO] Modelo salvo em ./joblib/xgb_seed0-xgb.joblib
+17:15:47 [INFO] Carregando dados já divididos em train/val/test...
+17:15:49 [INFO] Tamanhos -> train: 325975, val: 69852, test: 69852
+17:15:49 [INFO] Extraindo atributos numéricos (colunas de texto descartadas)...
+17:15:50 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:15:50 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:15:50 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:15:50 [INFO] Número de features: 30
+17:15:50 [INFO] Sem normalização para XGB (modelo baseado em árvores).
+17:15:50 [INFO] Treinando o modelo: XGB com todos os atributos numéricos...
+17:16:07 [INFO] [val] acc=0.9105 precision=0.9106 recall=0.9104 f1=0.9105 auc=0.9672
+17:16:07 [INFO] [test] acc=0.9097 precision=0.9099 recall=0.9096 f1=0.9097 auc=0.9672
+17:16:07 [INFO] Métricas salvas em: ../logs/experiments_results.csv
+17:16:07 [INFO] Modelo salvo em ./joblib/xgb_seed0-xgb.joblib
+17:35:16 [INFO] Carregando dados já divididos em train/val/test...
+17:35:19 [INFO] Tamanhos -> train: 325975, val: 69852, test: 69852
+17:35:19 [INFO] Extraindo atributos numéricos (colunas de texto descartadas)...
+17:35:19 [INFO] Features usadas: ['lex_length', 'lex_digit_count', 'lex_digit_ratio', 'lex_vowel_ratio', 'lex_consonant_ratio', 'lex_special_char_ratio', 'lex_entropy', 'lex_hyphen_count', 'lex_starts_with_digit', 'lex_has_repeated_chars', 'lex_max_consonant_seq', 'lex_max_digit_seq', 'lex_unique_char_ratio', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:35:19 [INFO] Features usadas: ['lex_length', 'lex_digit_count', 'lex_digit_ratio', 'lex_vowel_ratio', 'lex_consonant_ratio', 'lex_special_char_ratio', 'lex_entropy', 'lex_hyphen_count', 'lex_starts_with_digit', 'lex_has_repeated_chars', 'lex_max_consonant_seq', 'lex_max_digit_seq', 'lex_unique_char_ratio', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:35:19 [INFO] Features usadas: ['lex_length', 'lex_digit_count', 'lex_digit_ratio', 'lex_vowel_ratio', 'lex_consonant_ratio', 'lex_special_char_ratio', 'lex_entropy', 'lex_hyphen_count', 'lex_starts_with_digit', 'lex_has_repeated_chars', 'lex_max_consonant_seq', 'lex_max_digit_seq', 'lex_unique_char_ratio', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+17:35:19 [INFO] Número de features: 42
+17:35:19 [INFO] Sem normalização para XGB (modelo baseado em árvores).
+17:35:19 [INFO] Treinando o modelo: XGB com todos os atributos numéricos...
+17:35:33 [INFO] [val] acc=0.9119 precision=0.9121 recall=0.9118 f1=0.9119 auc=0.9689
+17:35:44 [INFO] [test] acc=0.9109 precision=0.9111 recall=0.9108 f1=0.9108 auc=0.9685
+17:35:44 [INFO] Métricas salvas em: ../logs/experiments_results.csv
+17:35:44 [INFO] Modelo salvo em ./joblib/xgb_seed0-xgb.joblib
+11:06:50 [INFO] Carregando dados já divididos em train/val/test...
+11:06:52 [INFO] Tamanhos -> train: 325975, val: 69852, test: 69852
+11:06:52 [INFO] Extraindo atributos numéricos (colunas de texto descartadas)...
+11:06:52 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+11:06:52 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+11:06:52 [INFO] Features usadas: ['lex_entropy', 'A Count', 'IP Count', 'MX Count', 'NS Count', 'A Missing', 'ASN Count', 'SOA Retry', 'AAAA Count', 'MX Missing', 'A TTL Count', 'CNAME Count', 'SOA Minimum', 'SOA Missing', 'SOA Refresh', 'A Medium TTL', 'MX Medium TTL', 'SOA TTL Count', 'SOA Medium TTL', 'AAAA Medium TTL', 'SOA Expire Length', 'SOA Serial Length', 'A TTL Standard Deviation', 'SOA TTL Standard Deviation', 'has_whois', 'lifetime', 'active_time', 'has_country', 'CCR', 'CCA']
+11:06:52 [INFO] Número de features: 30
+11:06:52 [INFO] Sem normalização para XGB (modelo baseado em árvores).
+11:06:52 [INFO] Treinando o modelo: XGB com todos os atributos numéricos...
+11:07:03 [INFO] [val] acc=0.9105 precision=0.9106 recall=0.9104 f1=0.9105 auc=0.9672
+11:07:03 [INFO] [test] acc=0.9097 precision=0.9099 recall=0.9096 f1=0.9097 auc=0.9672
+11:07:03 [INFO] Métricas salvas em: ../logs/experiments_results.csv
+11:07:03 [INFO] Modelo salvo em ./joblib/xgb_seed0-xgb.joblib
+14:51:59 [INFO] Carregando '../data/PhiUSIIL/cleaned_phiusiil.csv' e dividindo em 70/15/15 (seed=0)...
+14:51:59 [INFO] Tamanhos -> train: 165056, val: 35369, test: 35370
+14:51:59 [INFO] Extraindo atributos numéricos (colunas de texto descartadas)...
+14:51:59 [INFO] Features usadas: ['URLSimilarityIndex', 'LineOfCode', 'NoOfExternalRef', 'NoOfImage', 'NoOfSelfRef']
+14:51:59 [INFO] Features usadas: ['URLSimilarityIndex', 'LineOfCode', 'NoOfExternalRef', 'NoOfImage', 'NoOfSelfRef']
+14:51:59 [INFO] Features usadas: ['URLSimilarityIndex', 'LineOfCode', 'NoOfExternalRef', 'NoOfImage', 'NoOfSelfRef']
+14:51:59 [INFO] Número de features: 5
+14:51:59 [INFO] Sem normalização para XGB (modelo baseado em árvores).
+14:51:59 [INFO] Treinando o modelo: XGB com todos os atributos numéricos...
+14:52:01 [INFO] [val] acc=0.9999 precision=0.9999 recall=0.9999 f1=0.9999 auc=1.0000
+14:52:01 [INFO] [test] acc=0.9999 precision=0.9999 recall=0.9999 f1=0.9999 auc=1.0000
+14:52:01 [INFO] Métricas salvas em: ../logs/phiusiil_results.csv
+14:52:01 [INFO] Modelo salvo em ./joblib/xgb_seed0-xgb-phiusiil.joblib
