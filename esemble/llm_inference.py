@@ -23,20 +23,6 @@ Uso:
     DoRA/LoRA salvo como adaptador (não mergeado) -- passe a base separada:
         python evaluate_llm.py --model Qwen --modelpath ../models/Qwen/.../best \
             --base_modelpath Qwen/Qwen2.5-7B-Instruct --dora --train_mode tuning ...
-
-ATENÇÃO:
-- --dataset/--strategy/--parameters/--sample precisam bater com o que foi
-  usado no treino, senão o split de teste (tuning) ou o pool de avaliação
-  (zero/few) sai diferente do que o modelo realmente nunca viu.
-- Em --train_mode zero/few não há split de teste "oficial": o script
-  reproduz a MESMA lógica do treino (pool de 10% para exemplos few-shot +
-  90% de avaliação, dedupe, seed=0), então o conjunto avaliado é idêntico
-  independente da config de shots.
-- --dora + adaptador não mergeado exige --base_modelpath; se o adaptador foi
-  treinado sobre um modelo em 4-bit, o merge_and_unload() é pulado (não dá
-  pra mergear LoRA num modelo quantizado sem desquantizar) e o benchmark
-  roda com o PEFT wrapper por cima -- isso é o cenário real de produção
-  nesse caso, então não é um bug.
 """
 
 import argparse
@@ -71,21 +57,24 @@ try:
     import resource
 
     def peak_memory_mb():
-        # Linux: ru_maxrss vem em KB. (No macOS viria em bytes, não tratado aqui.)
         return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
-except ImportError:  # Windows não tem o módulo `resource`
+except ImportError:
     def peak_memory_mb():
         return None
-
 
 def gpu_peak_memory_mb():
     if not torch.cuda.is_available():
         return None
     return round(torch.cuda.max_memory_allocated() / (1024 * 1024), 2)
 
+def gpu_allocated_memory_mb():
+    if not torch.cuda.is_available():
+        return None
+    return round(torch.cuda.memory_allocated() / (1024 * 1024), 2)
+
 
 # ---------------------------------------------------------------------------
-# Constantes -- copiadas do script de treino pra manter prompt/formatação idênticos
+# Constantes
 # ---------------------------------------------------------------------------
 CHAT_TEMPLATE_MODELS = ["Llama-3", "Qwen", "Gemma", "TinyLlama", "DeepSeek"]
 LLM_MODELS = ["Llama-3", "TinyLlama", "Qwen", "Gemma", "DeepSeek"]
@@ -95,7 +84,6 @@ SYSTEM_INSTRUCTION = (
     "Analyze the domain record below and classify it as benign or malicious."
 )
 
-# Mesmo prefill do treino: força o próximo token gerado a ser o rótulo em si.
 LABEL_PREFILL = "Answer: "
 
 accuracy = load_metric("accuracy")
@@ -104,7 +92,7 @@ f1 = load_metric("f1")
 
 
 # ---------------------------------------------------------------------------
-# Dataset helpers -- copiados do script de treino (split fixo seed=0)
+# Dataset helpers
 # ---------------------------------------------------------------------------
 def split_70_15_15(X, y, random_state: int = 0):
     X_train, X_temp, y_train, y_temp = train_test_split(
@@ -190,13 +178,6 @@ def load_httpparams():
 
 
 def load_eval_split(args):
-    """Reproduz exatamente a lógica de carregamento/split do script de
-    treino e devolve (X_eval, y_eval, few_shot_examples):
-    - train_mode tuning: X_eval/y_eval = split de teste (15%), o mesmo
-      conjunto nunca visto durante o fine-tuning.
-    - train_mode zero/few: X_eval/y_eval = pool de 90% (após dedupe e
-      reserva do pool de exemplos), few_shot_examples = k exemplares por
-      classe amostrados do pool de 10% (só preenchido se train_mode=='few')."""
     if args.dataset == "domain-enriched":
         strategy = "prompt" if args.strategy == "tokenized" else "name"
         df_train = pd.read_csv("../data/acme/fixed_train.csv", index_col=False)
@@ -280,13 +261,11 @@ def load_eval_split(args):
 
         return X_eval, y_eval, few_shot_examples
 
-    # train_mode == "tuning": avalia no split de teste (15%), o mesmo
-    # conjunto reservado pelo train_model.py e nunca visto no fine-tuning.
     return X_test, y_test, few_shot_examples
 
 
 # ---------------------------------------------------------------------------
-# Formatação de prompt -- copiada do script de treino
+# Formatação de prompt
 # ---------------------------------------------------------------------------
 def format_eval_texts(args, tokenizer, X, few_shot_examples, is_causal):
     def format_chat_prompt(prompt_text):
@@ -313,7 +292,6 @@ def format_eval_texts(args, tokenizer, X, few_shot_examples, is_causal):
             return [format_few_shot(p, few_shot_examples) for p in X]
         return [f"{SYSTEM_INSTRUCTION}\n\n{p}{LABEL_PREFILL}" for p in X]
 
-    # train_mode == "tuning": classifier head -> sem prefill, sem geração
     if args.model in CHAT_TEMPLATE_MODELS:
         return [format_chat_prompt(p) for p in X]
     return [f"{SYSTEM_INSTRUCTION}\n\n{p}" for p in X]
@@ -327,7 +305,7 @@ def get_label_token_ids(tokenizer, prefix_text: str) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-# Carregamento do modelo -- copiado do script de treino
+# Carregamento do modelo
 # ---------------------------------------------------------------------------
 def load_model_and_tokenizer(args):
     is_causal = args.train_mode in ("zero", "few")
@@ -383,13 +361,16 @@ def load_model_and_tokenizer(args):
         model.config.bos_token_id = tokenizer.bos_token_id
         model.config.eos_token_id = tokenizer.eos_token_id
 
+    # Garante envio para GPU caso não use bitsandbytes auto device_map
+    if not bnb_config and torch.cuda.is_available():
+        model = model.to("cuda")
+
     model.eval()
     return model, tokenizer, is_causal
 
 
 # ---------------------------------------------------------------------------
-# Forward pass em lote -- unifica o caso causal (logit restrito 0/1) e o
-# caso classifier head (logits do próprio classificador)
+# Forward pass
 # ---------------------------------------------------------------------------
 def run_forward(model, tokenizer, texts, batch_size, max_length, is_causal, token_ids=None):
     all_logits = []
@@ -406,8 +387,6 @@ def run_forward(model, tokenizer, texts, batch_size, max_length, is_causal, toke
             token_0, token_1 = token_ids
             attn = inputs["attention_mask"]
             seq_len = attn.size(1)
-            # Índice do último token real por sequência -- funciona com left
-            # padding (Llama/Qwen/TinyLlama/DeepSeek) e right padding (Gemma).
             last_real_idx = seq_len - 1 - attn.flip(dims=[1]).argmax(dim=1)
             last_token_logits = outputs.logits[
                 torch.arange(outputs.logits.size(0)), last_real_idx, :
@@ -435,8 +414,14 @@ def benchmark_batch(model, tokenizer, texts, is_causal, batch_size, n_runs, warm
     batch_times = []
     logits = None
     for _ in range(n_runs):
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         ini = time.perf_counter()
+
         logits = run_forward(model, tokenizer, texts, batch_size, max_length, is_causal, token_ids)
+
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         end = time.perf_counter()
         batch_times.append(end - ini)
 
@@ -454,23 +439,39 @@ def benchmark_batch(model, tokenizer, texts, is_causal, batch_size, n_runs, warm
 
 
 def benchmark_single_call(model, tokenizer, texts, is_causal, n_calls, max_length, token_ids=None):
-    """Mede predict() amostra a amostra (batch_size=1) -- cenário de serving
-    em tempo real, ex.: classificar um domínio por vez numa requisição."""
-    n_calls = min(n_calls, len(texts))
-    subset = texts[:n_calls]
+    """Mede tempo de inferência amostra a amostra (batch_size=1) em N amostras fixas,
+    sincronizando CUDA para medição real de latência."""
+    actual_n = min(n_calls, len(texts))
 
-    run_forward(model, tokenizer, subset[:1], 1, max_length, is_causal, token_ids)  # warm-up
+    # Amostra determinística de 1000 itens se houver mais que isso
+    if len(texts) > actual_n:
+        rng = np.random.RandomState(0)
+        chosen_indices = rng.choice(len(texts), size=actual_n, replace=False)
+        subset = [texts[i] for i in chosen_indices]
+    else:
+        subset = texts[:actual_n]
+
+    # Warm-up (descarta inicialização de CUDA graphs / alocações pontuais)
+    run_forward(model, tokenizer, subset[:2], 1, max_length, is_causal, token_ids)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
 
     times = []
     for t in subset:
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         ini = time.perf_counter()
+
         run_forward(model, tokenizer, [t], 1, max_length, is_causal, token_ids)
+
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         end = time.perf_counter()
         times.append(end - ini)
 
     times_sorted = sorted(times)
     return {
-        "single_call_n": n_calls,
+        "single_call_n": actual_n,
         "single_call_mean_ms": round(mean(times) * 1000, 4),
         "single_call_median_ms": round(median(times) * 1000, 4),
         "single_call_p95_ms": round(_percentile(times_sorted, 95) * 1000, 4),
@@ -480,10 +481,6 @@ def benchmark_single_call(model, tokenizer, texts, is_causal, n_calls, max_lengt
 
 
 def get_model_size_mb(model, model_path) -> float:
-    """Tamanho em disco do checkpoint local (comparável ao model_size_mb do
-    evaluate_model.py). Se model_path for um id do HF Hub (não um diretório
-    local, ex.: zero-shot direto do hub), cai pro footprint em memória dos
-    parâmetros/buffers já carregados."""
     if model_path and os.path.isdir(model_path):
         total = 0
         for root, _, files in os.walk(model_path):
@@ -560,10 +557,10 @@ def get_args():
     parser.add_argument("--exp", type=str, default=None, help="Nome pra identificar a linha no CSV de log")
     parser.add_argument("--n_runs", type=int, default=5, help="Repetições do benchmark em lote")
     parser.add_argument("--warmup", type=int, default=1, help="Rodadas de warm-up antes de medir (não contam)")
-    parser.add_argument("--single_call_n", type=int, default=300, help="Nº de amostras no benchmark amostra-a-amostra")
+    parser.add_argument("--single_call_n", type=int, default=1000, help="Nº de amostras no benchmark amostra-a-amostra (padrão 1000)")
     parser.add_argument("--output_json", type=str, default=None, help="Salva todas as métricas nesse .json")
     parser.add_argument("--log_csv", type=str, default="../logs/llm_inference_results.csv",
-                         help="CSV onde as métricas são anexadas")
+                        help="CSV onde as métricas são anexadas")
 
     args = parser.parse_args()
 
@@ -582,7 +579,7 @@ def main():
 
     print(f"[1/4] Carregando dataset '{args.dataset}' (train_mode={args.train_mode})...")
     eval_texts_raw, eval_labels, few_shot_examples = load_eval_split(args)
-    print(f"Amostras de avaliação: {len(eval_texts_raw)}")
+    print(f"Amostras de avaliação disponíveis: {len(eval_texts_raw)}")
 
     if args.max_eval_samples and len(eval_texts_raw) > args.max_eval_samples:
         rng = np.random.RandomState(0)
@@ -594,6 +591,10 @@ def main():
     print(f"[2/4] Carregando modelo/tokenizer de {args.modelpath}...")
     model, tokenizer, is_causal = load_model_and_tokenizer(args)
 
+    # Mede VRAM alocada após o carregamento do modelo na GPU
+    model_load_vram = gpu_allocated_memory_mb()
+    print(f"VRAM alocada pós-carregamento do modelo: {model_load_vram} MB")
+
     print("[3/4] Formatando textos de entrada...")
     formatted_texts = format_eval_texts(args, tokenizer, eval_texts_raw, few_shot_examples, is_causal)
 
@@ -602,21 +603,21 @@ def main():
         token_ids = get_label_token_ids(tokenizer, formatted_texts[0])
         print(f"max_length (dinâmico, zero/few): {max_length}")
     else:
-        max_length = 200  # mesmo valor fixo usado no preprocess_function do treino
+        max_length = 200
         token_ids = None
 
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
 
     print("[4/4] Rodando benchmarks de inferência...")
-    print("Benchmark em lote...")
+    print("Benchmark em lote (para métricas e throughput)...")
     batch_metrics, logits = benchmark_batch(
         model, tokenizer, formatted_texts, is_causal,
         batch_size=args.batch, n_runs=args.n_runs, warmup=args.warmup,
         max_length=max_length, token_ids=token_ids,
     )
 
-    print("Benchmark amostra-a-amostra...")
+    print(f"Benchmark amostra-a-amostra (1 amostra por vez, {args.single_call_n} amostras)...")
     single_metrics = benchmark_single_call(
         model, tokenizer, formatted_texts, is_causal,
         n_calls=args.single_call_n, max_length=max_length, token_ids=token_ids,
@@ -626,14 +627,17 @@ def main():
     perf_metrics["model_size_mb"] = get_model_size_mb(model, args.modelpath)
     mem = peak_memory_mb()
     perf_metrics["process_peak_memory_mb"] = round(mem, 2) if mem is not None else None
-    perf_metrics["gpu_peak_memory_mb"] = gpu_peak_memory_mb()
+
+    # Medições de GPU
+    perf_metrics["gpu_model_load_vram_mb"] = model_load_vram
+    perf_metrics["gpu_inference_peak_vram_mb"] = gpu_peak_memory_mb()
 
     cls_metrics = compute_metrics((logits, eval_labels))
 
     print("\n=== Métricas de classificação ===")
     print(cls_metrics)
 
-    print("\n=== Métricas de desempenho (inferência) ===")
+    print("\n=== Métricas de desempenho (inferência e memória) ===")
     for k, v in perf_metrics.items():
         print(f"{k}: {v}")
 
