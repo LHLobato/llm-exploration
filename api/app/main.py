@@ -19,8 +19,11 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, request_id_ctx
 from app.db.repository import DatabaseRepository, InMemoryRepository
 from app.deps.auth import SlidingWindowRateLimiter
+from app.domains.router import router as domains_router
+from app.domains.service import DomainAnalysisService
 from app.keys.router import router as keys_router
 from app.keys.service import ApiKeyService
+from app.pipeline.inference.ensemble import Domain_Ensemble
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +64,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Gerencia ciclo de vida da API (conexões de banco e carregamento do Domain_Ensemble)."""
     settings = get_settings()
     configure_logging("DEBUG" if settings.debug else "INFO")
+    if settings.eager_load_models and hasattr(app.state, "ensemble"):
+        app.state.ensemble.load_models()
     app.state.ready = True
     app.state.model_version = settings.model_version
     logger.info("Starting %s v%s", settings.app_name, settings.app_version)
@@ -72,10 +77,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app(
     settings: Settings | None = None,
     repo: DatabaseRepository | None = None,
+    ensemble: Domain_Ensemble | None = None,
+    domain_analysis_service: DomainAnalysisService | None = None,
 ) -> FastAPI:
-    """Cria e configura a instância FastAPI com serviços de Auth, Chaves e Banco."""
+    """Cria e configura a instância FastAPI com serviços de Auth, Chaves, Banco e Domain_Ensemble."""
     cfg = settings or get_settings()
     db_repo = repo or InMemoryRepository()
+    ensemble_engine = ensemble or Domain_Ensemble.from_settings(cfg)
+    analysis_service = domain_analysis_service or DomainAnalysisService(
+        repo=db_repo,
+        ensemble=ensemble_engine,
+        settings=cfg,
+    )
 
     app = FastAPI(
         title=cfg.app_name,
@@ -90,6 +103,8 @@ def create_app(
     app.state.auth_service = AuthService(repo=db_repo, settings=cfg)
     app.state.api_key_service = ApiKeyService(repo=db_repo, settings=cfg)
     app.state.rate_limiter = SlidingWindowRateLimiter()
+    app.state.ensemble = ensemble_engine
+    app.state.domain_analysis_service = analysis_service
 
     app.add_middleware(
         CORSMiddleware,
@@ -109,9 +124,10 @@ def create_app(
 
     register_exception_handlers(app)
 
-    # Rotas /v1/auth/* e /v1/me, /v1/keys/*, /v1/usage
+    # Rotas /v1/auth/*, /v1/me, /v1/keys/*, /v1/usage e /v1/domains/*
     app.include_router(auth_router, prefix=cfg.api_v1_prefix)
     app.include_router(keys_router, prefix=cfg.api_v1_prefix)
+    app.include_router(domains_router, prefix=cfg.api_v1_prefix)
 
     @app.get("/healthz", tags=["Health"])
     async def healthz() -> dict[str, str]:

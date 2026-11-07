@@ -62,7 +62,7 @@ def test_lexical_features_and_42_canonical_vector_assembly() -> None:
     assert lex["lex_digit_count"] == 1.0
     assert lex["lex_starts_with_digit"] == 0.0
     assert lex["lex_hyphen_count"] == 0.0
-    assert lex["lex_max_consonant_seq"] == 4.0
+    assert lex["lex_max_consonant_seq"] == 5.0  # "ckdns" em duckdns.org
     assert lex["lex_max_digit_seq"] == 1.0
     # Soma de vowel_ratio e consonant_ratio sobre letras deve ser 1.0 (advanced_analysis.py linha 26)
     assert round(lex["lex_vowel_ratio"] + lex["lex_consonant_ratio"], 5) == 1.0
