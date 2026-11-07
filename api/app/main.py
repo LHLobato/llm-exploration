@@ -12,9 +12,15 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
+from app.auth.router import router as auth_router
+from app.auth.service import AuthService
 from app.core.config import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, request_id_ctx
+from app.db.repository import DatabaseRepository, InMemoryRepository
+from app.deps.auth import SlidingWindowRateLimiter
+from app.keys.router import router as keys_router
+from app.keys.service import ApiKeyService
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +69,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Shutting down %s", settings.app_name)
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
-    """Cria e configura a instância FastAPI."""
+def create_app(
+    settings: Settings | None = None,
+    repo: DatabaseRepository | None = None,
+) -> FastAPI:
+    """Cria e configura a instância FastAPI com serviços de Auth, Chaves e Banco."""
     cfg = settings or get_settings()
+    db_repo = repo or InMemoryRepository()
+
     app = FastAPI(
         title=cfg.app_name,
         version=cfg.app_version,
@@ -75,6 +86,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.ready = True
     app.state.model_version = cfg.model_version
+    app.state.repo = db_repo
+    app.state.auth_service = AuthService(repo=db_repo, settings=cfg)
+    app.state.api_key_service = ApiKeyService(repo=db_repo, settings=cfg)
+    app.state.rate_limiter = SlidingWindowRateLimiter()
 
     app.add_middleware(
         CORSMiddleware,
@@ -93,6 +108,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(RequestContextMiddleware)
 
     register_exception_handlers(app)
+
+    # Rotas /v1/auth/* e /v1/me, /v1/keys/*, /v1/usage
+    app.include_router(auth_router, prefix=cfg.api_v1_prefix)
+    app.include_router(keys_router, prefix=cfg.api_v1_prefix)
 
     @app.get("/healthz", tags=["Health"])
     async def healthz() -> dict[str, str]:
